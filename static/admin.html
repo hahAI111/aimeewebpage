@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | Jing Wang</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- Login Overlay -->
+    <div class="admin-login-overlay" id="loginOverlay">
+        <div class="admin-login-box">
+            <h2>Admin Login</h2>
+            <form id="loginForm">
+                <input type="text" id="loginUser" placeholder="Username" required autocomplete="username">
+                <input type="password" id="loginPass" placeholder="Password" required autocomplete="current-password">
+                <button type="submit" class="btn">Sign In</button>
+                <p class="error-msg" id="loginError"></p>
+            </form>
+        </div>
+    </div>
+
+    <nav class="navbar">
+        <div class="nav-brand"><a href="/">Jing Wang</a></div>
+        <div class="nav-links">
+            <a href="/">Home</a>
+            <a href="/blog">Blog</a>
+            <a href="/projects">Projects</a>
+            <a href="/admin" class="active">Admin</a>
+            <button class="btn btn-sm btn-outline" id="logoutBtn" style="display:none" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <div class="admin-container" id="dashboard" style="display:none">
+        <!-- KPI Cards -->
+        <div class="kpi-grid">
+            <div class="kpi-card"><h3 id="kpiVisitors">-</h3><p>Visitors</p></div>
+            <div class="kpi-card"><h3 id="kpiPageviews">-</h3><p>Page Views</p></div>
+            <div class="kpi-card"><h3 id="kpiClicks">-</h3><p>Clicks</p></div>
+            <div class="kpi-card"><h3 id="kpiMessages">-</h3><p>Messages</p></div>
+            <div class="kpi-card"><h3 id="kpiPosts">-</h3><p>Blog Posts</p></div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="charts-row">
+            <div class="chart-card">
+                <h3>Visitors (30 days)</h3>
+                <canvas id="visitorsChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Page Views (30 days)</h3>
+                <canvas id="pageviewsChart"></canvas>
+            </div>
+        </div>
+
+        <div class="charts-row">
+            <div class="chart-card">
+                <h3>Top Clicked Elements</h3>
+                <canvas id="clicksChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Device Breakdown</h3>
+                <canvas id="devicesChart"></canvas>
+            </div>
+        </div>
+
+        <div class="charts-row">
+            <div class="chart-card">
+                <h3>Email Domains</h3>
+                <canvas id="domainsChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Top Pages</h3>
+                <canvas id="pagesChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Top Blog Posts -->
+        <div class="admin-table-card">
+            <h3>Top Blog Posts</h3>
+            <table class="admin-table" id="postsTable">
+                <thead><tr><th>Title</th><th>Views</th><th>Published</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- Recent Messages -->
+        <div class="admin-table-card">
+            <h3>Recent Messages</h3>
+            <table class="admin-table" id="messagesTable">
+                <thead><tr><th>Name</th><th>Email</th><th>Message</th><th>Date</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- Visitor List -->
+        <div class="admin-table-card">
+            <div class="table-header">
+                <h3>Visitors</h3>
+                <div class="table-controls">
+                    <input type="text" id="domainFilter" placeholder="Filter by domain..." class="input-sm">
+                    <button class="btn btn-sm" onclick="loadVisitors()">Filter</button>
+                </div>
+            </div>
+            <table class="admin-table" id="visitorsTable">
+                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Joined</th></tr></thead>
+                <tbody></tbody>
+            </table>
+            <div class="pagination" id="visitorPagination"></div>
+        </div>
+
+        <!-- Export & Actions -->
+        <div class="admin-actions">
+            <h3>Data Export (CSV)</h3>
+            <div class="action-buttons">
+                <a class="btn btn-sm" href="/api/admin/export/visitors" target="_blank">Export Visitors</a>
+                <a class="btn btn-sm" href="/api/admin/export/click_logs" target="_blank">Export Clicks</a>
+                <a class="btn btn-sm" href="/api/admin/export/messages" target="_blank">Export Messages</a>
+                <a class="btn btn-sm" href="/api/admin/export/page_views" target="_blank">Export Page Views</a>
+            </div>
+            <h3 style="margin-top:1.5rem">GitHub Sync</h3>
+            <button class="btn" id="syncBtn" onclick="syncGitHub()">Sync GitHub Projects</button>
+            <span id="syncStatus"></span>
+        </div>
+
+        <!-- Retention Cohorts -->
+        <div class="admin-table-card">
+            <h3>Retention Cohorts (60 days)</h3>
+            <table class="admin-table" id="retentionTable">
+                <thead><tr><th>Cohort</th><th>Size</th><th>Day 0</th><th>Day 1</th><th>Day 7</th><th>Day 30</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <p>&copy; 2025 Jing Wang. Admin Dashboard.</p>
+    </footer>
+
+    <script>
+        const charts = {};
+        let visitorPage = 1;
+
+        // ── Login ──
+        document.getElementById("loginForm").addEventListener("submit", async e => {
+            e.preventDefault();
+            const errEl = document.getElementById("loginError");
+            errEl.textContent = "";
+            try {
+                const res = await fetch("/api/admin/login", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        username: document.getElementById("loginUser").value,
+                        password: document.getElementById("loginPass").value
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) { showDashboard(); }
+                else { errEl.textContent = data.error || "Login failed"; }
+            } catch (err) { errEl.textContent = "Connection error"; }
+        });
+
+        async function logout() {
+            await fetch("/api/admin/logout", {method: "POST"});
+            location.reload();
+        }
+
+        function showDashboard() {
+            document.getElementById("loginOverlay").style.display = "none";
+            document.getElementById("dashboard").style.display = "block";
+            document.getElementById("logoutBtn").style.display = "inline-block";
+            loadDashboard();
+        }
+
+        // Try loading stats to check if already logged in
+        fetch("/api/admin/stats").then(r => {
+            if (r.ok) showDashboard();
+        });
+
+        // ── Dashboard Data ──
+        async function loadDashboard() {
+            try {
+                const res = await fetch("/api/admin/stats");
+                if (!res.ok) return;
+                const d = await res.json();
+
+                document.getElementById("kpiVisitors").textContent = d.visitors;
+                document.getElementById("kpiPageviews").textContent = d.pageviews;
+                document.getElementById("kpiClicks").textContent = d.clicks;
+                document.getElementById("kpiMessages").textContent = d.messages;
+                document.getElementById("kpiPosts").textContent = d.post_count;
+
+                renderLineChart("visitorsChart", d.visitors_per_day, "Visitors");
+                renderLineChart("pageviewsChart", d.pageviews_per_day, "Page Views");
+                renderBarChart("clicksChart", d.top_clicks, "element", "clicks", "Clicks");
+                renderDoughnut("devicesChart", d.devices);
+                renderBarChart("domainsChart", d.email_domains, "domain", "count", "Visitors");
+                renderBarChart("pagesChart", d.top_pages, "page", "views", "Views");
+
+                // Top posts table
+                const postsTb = document.querySelector("#postsTable tbody");
+                postsTb.innerHTML = (d.top_posts||[]).map(p =>
+                    `<tr><td>${esc(p.title)}</td><td>${p.views}</td><td>${p.published_at?.split(' ')[0] || ''}</td></tr>`
+                ).join("");
+
+                // Messages table
+                const msgTb = document.querySelector("#messagesTable tbody");
+                msgTb.innerHTML = (d.recent_messages||[]).map(m =>
+                    `<tr><td>${esc(m.name)}</td><td>${esc(m.email)}</td><td>${esc(m.message).substring(0,80)}</td><td>${m.sent_at?.split(' ')[0] || ''}</td></tr>`
+                ).join("");
+
+                loadVisitors();
+                loadRetention();
+            } catch (e) { console.error("Dashboard load failed", e); }
+        }
+
+        // ── Visitors Table ──
+        async function loadVisitors() {
+            const domain = document.getElementById("domainFilter").value.trim();
+            const params = new URLSearchParams({page: visitorPage, per_page: 20});
+            if (domain) params.set("domain", domain);
+            try {
+                const res = await fetch("/api/admin/visitors?" + params);
+                const data = await res.json();
+                const tb = document.querySelector("#visitorsTable tbody");
+                tb.innerHTML = data.visitors.map(v =>
+                    `<tr><td>${v.id}</td><td>${esc(v.name)}</td><td>${esc(v.email)}</td><td>${v.created_at?.split(' ')[0] || ''}</td></tr>`
+                ).join("");
+                const total = Math.ceil(data.total / data.per_page);
+                const pag = document.getElementById("visitorPagination");
+                let html = "";
+                if (visitorPage > 1) html += `<button onclick="visitorPage--;loadVisitors()">&laquo;</button>`;
+                html += `<span>${visitorPage}/${total}</span>`;
+                if (visitorPage < total) html += `<button onclick="visitorPage++;loadVisitors()">&raquo;</button>`;
+                pag.innerHTML = html;
+            } catch (e) {}
+        }
+
+        // ── Retention ──
+        async function loadRetention() {
+            try {
+                const res = await fetch("/api/admin/retention");
+                const cohorts = await res.json();
+                const tb = document.querySelector("#retentionTable tbody");
+                tb.innerHTML = cohorts.map(c => {
+                    const pct = n => c.cohort_size ? Math.round(100*n/c.cohort_size)+'%' : '-';
+                    return `<tr><td>${c.cohort_date}</td><td>${c.cohort_size}</td><td>${pct(c.day_0)}</td><td>${pct(c.day_1)}</td><td>${pct(c.day_7)}</td><td>${pct(c.day_30)}</td></tr>`;
+                }).join("");
+            } catch (e) {}
+        }
+
+        // ── GitHub Sync ──
+        async function syncGitHub() {
+            const btn = document.getElementById("syncBtn");
+            const status = document.getElementById("syncStatus");
+            btn.disabled = true; status.textContent = "Syncing...";
+            try {
+                const res = await fetch("/api/projects/sync", {method: "POST"});
+                const data = await res.json();
+                if (res.ok) status.textContent = `Synced ${data.synced} repos!`;
+                else status.textContent = data.error || "Sync failed";
+            } catch (e) { status.textContent = "Network error"; }
+            btn.disabled = false;
+        }
+
+        // ── Chart Helpers ──
+        const ACCENT = "#6c5ce7";
+        const ACCENT2 = "#a29bfe";
+
+        function renderLineChart(id, data, label) {
+            if (charts[id]) charts[id].destroy();
+            const ctx = document.getElementById(id);
+            charts[id] = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: data.map(d => d.day),
+                    datasets: [{label, data: data.map(d => d.count),
+                        borderColor: ACCENT, backgroundColor: ACCENT+"33",
+                        fill: true, tension: 0.3, pointRadius: 2}]
+                },
+                options: {responsive:true, plugins:{legend:{display:false}},
+                    scales:{x:{ticks:{maxTicksToSkip:5}},y:{beginAtZero:true}}}
+            });
+        }
+
+        function renderBarChart(id, data, labelKey, valueKey, label) {
+            if (charts[id]) charts[id].destroy();
+            const ctx = document.getElementById(id);
+            charts[id] = new Chart(ctx, {
+                type: "bar",
+                data: {
+                    labels: data.map(d => d[labelKey]),
+                    datasets: [{label, data: data.map(d => d[valueKey]),
+                        backgroundColor: ACCENT, borderRadius: 4}]
+                },
+                options: {responsive:true, indexAxis: data.length > 6 ? "y" : "x",
+                    plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true},y:{beginAtZero:true}}}
+            });
+        }
+
+        function renderDoughnut(id, data) {
+            if (charts[id]) charts[id].destroy();
+            const ctx = document.getElementById(id);
+            const colors = ["#6c5ce7","#a29bfe","#fd79a8","#fdcb6e","#00cec9","#636e72"];
+            charts[id] = new Chart(ctx, {
+                type: "doughnut",
+                data: {
+                    labels: data.map(d => d.device),
+                    datasets: [{data: data.map(d => d.count), backgroundColor: colors.slice(0, data.length)}]
+                },
+                options: {responsive:true, plugins:{legend:{position:"bottom"}}}
+            });
+        }
+
+        function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+    </script>
+</body>
+</html>

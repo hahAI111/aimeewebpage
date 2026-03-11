@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projects | Jing Wang</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><a href="/">Jing Wang</a></div>
+        <div class="nav-links">
+            <a href="/">Home</a>
+            <a href="/blog">Blog</a>
+            <a href="/projects" class="active">Projects</a>
+        </div>
+    </nav>
+
+    <section class="section projects-section">
+        <h2 class="section-title">Projects</h2>
+        <p class="section-subtitle">Open-source work and personal projects synced from GitHub.</p>
+
+        <div class="projects-grid" id="projectsGrid">
+            <div class="loading-spinner">Loading projects...</div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <p>&copy; 2025 Jing Wang. Microsoft AI Support Engineer.</p>
+    </footer>
+
+    <script>
+        function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+        async function loadProjects() {
+            const grid = document.getElementById("projectsGrid");
+            try {
+                const res = await fetch("/api/projects");
+                const projects = await res.json();
+                if (!projects.length) {
+                    grid.innerHTML = '<p class="empty-state">No projects synced yet. Check back later!</p>';
+                    return;
+                }
+                grid.innerHTML = projects.map(p => `
+                    <div class="project-card${p.featured ? ' featured' : ''}">
+                        ${p.featured ? '<span class="featured-badge">Featured</span>' : ''}
+                        <h3>${esc(p.name)}</h3>
+                        <p class="project-desc">${esc(p.description || 'No description')}</p>
+                        <div class="project-meta">
+                            ${p.language ? `<span class="project-lang"><span class="lang-dot" style="background:${langColor(p.language)}"></span>${esc(p.language)}</span>` : ''}
+                            <span title="Stars">&#9733; ${p.stars}</span>
+                            <span title="Forks">&#9741; ${p.forks}</span>
+                            ${p.open_issues ? `<span title="Issues">&#9888; ${p.open_issues}</span>` : ''}
+                        </div>
+                        <div class="project-links">
+                            <a href="https://github.com/${p.github_repo}" target="_blank" rel="noopener" class="btn btn-sm">GitHub</a>
+                            ${p.homepage ? `<a href="${esc(p.homepage)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">Live Demo</a>` : ''}
+                        </div>
+                        ${p.last_commit_at ? `<div class="project-updated">Last commit: ${new Date(p.last_commit_at).toLocaleDateString()}</div>` : ''}
+                    </div>
+                `).join("");
+            } catch (e) {
+                grid.innerHTML = '<p class="empty-state">Failed to load projects.</p>';
+            }
+        }
+
+        function langColor(lang) {
+            const colors = {Python:"#3572A5",JavaScript:"#f1e05a",TypeScript:"#3178c6",
+                HTML:"#e34c26",CSS:"#563d7c",Java:"#b07219","C#":"#178600",
+                Shell:"#89e051",Go:"#00ADD8",Rust:"#dea584"};
+            return colors[lang] || "#8b8b8b";
+        }
+
+        loadProjects();
+    </script>
+</body>
+</html>

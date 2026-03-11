@@ -1,3 +1,24 @@
+// ── Page View Tracking ────────────────────────────────
+(function() {
+  const startTime = Date.now();
+  function sendPageview(duration) {
+    fetch('/api/pageview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        page: window.location.pathname,
+        referrer: document.referrer || '',
+        screen_width: window.innerWidth,
+        duration_sec: Math.round(duration / 1000)
+      })
+    }).catch(() => {});
+  }
+  sendPageview(0);
+  window.addEventListener('beforeunload', () => {
+    sendPageview(Date.now() - startTime);
+  });
+})();
+
 // ── Click Tracking ─────────────────────────────────────
 document.addEventListener('click', (e) => {
   const tracked = e.target.closest('[data-track]');
