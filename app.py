@@ -6,6 +6,8 @@ import hashlib
 import smtplib
 import csv
 import io
+import threading
+import time
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 from functools import wraps
@@ -636,6 +638,22 @@ try:
     init_db()
 except Exception as e:
     print(f"DB init warning (will retry on first request): {e}")
+
+# ── Background GitHub Sync (every 6 hours) ────────────────
+GITHUB_SYNC_INTERVAL = int(os.environ.get("GITHUB_SYNC_INTERVAL", "21600"))  # default 6h
+
+def _github_sync_loop():
+    while True:
+        time.sleep(GITHUB_SYNC_INTERVAL)
+        try:
+            _seed_github_projects()
+            cache_delete("projects:*")
+            print(f"[auto-sync] GitHub projects synced at {datetime.utcnow().isoformat()}")
+        except Exception as e:
+            print(f"[auto-sync] GitHub sync failed: {e}")
+
+_sync_thread = threading.Thread(target=_github_sync_loop, daemon=True)
+_sync_thread.start()
 
 # ── Helpers ────────────────────────────────────────────────
 EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
