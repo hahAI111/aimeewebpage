@@ -166,5 +166,9 @@ All documentation is in the [`docs/`](docs/) folder:
 - [POSTGRESQL.md](docs/POSTGRESQL.md) — Database schema, SQL operations, monitoring & maintenance
 - [REDIS.md](docs/REDIS.md) — Cache strategy, core functions, Azure Redis monitoring
 - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — Issues encountered during development and solutions
-- [MIGRATION.md](docs/MIGRATION.md) — Migration guide: backup, self-deployment, platform comparison
 - [STORY.md](docs/STORY.md) — The full project journey from scratch to production
+
+### Guides (in [`guides/`](guides/))
+
+- [BACKUP_AND_MIGRATION.md](guides/BACKUP_AND_MIGRATION.md) — What to back up, what you'll lose, and how to migrate to a new platform
+- [HOW_TO_DEPLOY.md](guides/HOW_TO_DEPLOY.md) — How to run the code locally and deploy to Railway, Render, Azure, or any VPS
