@@ -425,18 +425,20 @@ gunicorn --bind=0.0.0.0:8000 --timeout 600 app:app
 | `app` (first) | Python module name | The file `app.py` → Python module `app` (drop the `.py`). Gunicorn runs `import app` to load your code. | `ModuleNotFoundError` → Gunicorn can't start. |
 | `app` (second) | Flask variable name | Inside `app.py`, the line `app = Flask(__name__)` creates a Flask application object called `app`. Gunicorn looks for this variable and calls it as a WSGI application. | `AppImportError: Failed to find attribute 'app'` → Gunicorn can't start. |
 
-### Analogy
+### Analogy / 类比
 
 ```
-Gunicorn  = Restaurant manager (manages multiple waiters, replaces anyone who calls in sick)
-Flask     = Chef (only cares about cooking — making the actual responses)
-app.py    = The kitchen
-0.0.0.0   = Front door wide open (anyone can walk in and order)
-:8000     = The restaurant's street address (Azure knows to send customers to #8000)
-timeout   = Each dish has a 10-minute max prep time; if the chef takes longer, restart the order
+Gunicorn  = Restaurant manager    / 餐厅经理（管理多个服务员，有人请假自动补人）
+Flask     = Chef                  / 厨师（只管做菜）
+app.py    = The kitchen           / 厨房
+0.0.0.0   = Front door wide open  / 大门敞开（谁都能进来点餐）
+:8000     = Street address #8000  / 餐厅门牌号（Azure 知道去 8000 号找你）
+timeout   = 10-min max prep time  / 做一道菜最多等 10 分钟，超时就重做
 ```
 
 Flask's dev server is like the chef doing everything alone — cooking, taking orders, washing dishes. One customer at a time. Gunicorn is the manager who hires a team so the restaurant can serve many customers simultaneously.
+
+Flask 自带的服务器就像厨师一个人又做菜又端盘子又收银——同时只能服务一个客人。Gunicorn 就是请了一个经理来管理前厅，让餐厅能同时接待很多客人。
 
 ---
 
