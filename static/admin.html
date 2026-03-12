@@ -43,6 +43,32 @@
             <div class="kpi-card"><h3 id="kpiClicks">-</h3><p>Clicks</p></div>
             <div class="kpi-card"><h3 id="kpiMessages">-</h3><p>Messages</p></div>
             <div class="kpi-card"><h3 id="kpiPosts">-</h3><p>Blog Posts</p></div>
+            <div class="kpi-card" id="redisKpiCard" style="position:relative">
+                <h3 id="kpiRedis" style="display:flex;align-items:center;justify-content:center;gap:6px">
+                    <svg width="20" height="20" viewBox="0 0 32 32" fill="currentColor"><path d="M30.9 17.6c-.1.6-1.6 1.3-4.5 2.3-1.3.5-3.1 1-5 1.5-2 .4-4 .7-6.4.7s-4.4-.3-6.4-.7c-1.9-.4-3.7-1-5-1.5-2.9-1-4.4-1.8-4.5-2.3v3.2c0 .8 1.5 1.7 4.5 2.7 1.3.5 3 1 5 1.4 2 .5 4 .7 6.4.7s4.4-.3 6.4-.7c2-.4 3.7-1 5-1.4 3-1.1 4.5-1.9 4.5-2.7v-3.2zm0-6.5c-.1.6-1.6 1.3-4.5 2.3-1.3.5-3.1 1-5 1.5-2 .4-4 .7-6.4.7s-4.4-.3-6.4-.7c-1.9-.4-3.7-1-5-1.5C.7 12.4-.8 11.6-.9 11.1V7.9c0-.8 1.5-1.7 4.5-2.7C4.9 4.7 6.6 4.2 8.6 3.8c2-.5 4-.7 6.4-.7s4.4.3 6.4.7c2 .4 3.7 1 5 1.4 3 1.1 4.5 1.9 4.5 2.7v3.2zm0 0" opacity=".3"/><ellipse cx="15" cy="7.9" rx="14.9" ry="4.8" opacity=".6"/></svg>
+                    <span>-</span>
+                </h3>
+                <p>Redis Cache</p>
+            </div>
+        </div>
+
+        <!-- Redis Cache Info -->
+        <div class="admin-table-card" id="redisInfoPanel" style="display:none">
+            <h3 style="display:flex;align-items:center;gap:8px">
+                <svg width="22" height="22" viewBox="0 0 256 220" fill="#dc382d"><path d="M245.97 168.94c-13.25 7.56-81.9 35.13-96.53 42.75-14.62 7.62-22.73 7.54-34.27 1.47C103.63 207.1 19.3 176.56 6.03 168.94c-6.64-3.81-10.1-7.01-10.1-10.08V140.5s95.14-20.74 110.44-26.49c15.3-5.75 20.6-5.9 34.14.13 13.54 6.03 91.47 18.94 105.49 23.31v18.74c0 3.03-2.61 6.4-10.1 10.08l10.07 2.67z" opacity=".2"/></svg>
+                Redis Cache Status
+            </h3>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem">
+                <div class="kpi-card" style="padding:.8rem"><p style="color:#aaa;font-size:.85rem">Status</p><h3 id="redisStatus" style="font-size:1.1rem">-</h3></div>
+                <div class="kpi-card" style="padding:.8rem"><p style="color:#aaa;font-size:.85rem">Memory Used</p><h3 id="redisMemory" style="font-size:1.1rem">-</h3></div>
+                <div class="kpi-card" style="padding:.8rem"><p style="color:#aaa;font-size:.85rem">Peak Memory</p><h3 id="redisPeak" style="font-size:1.1rem">-</h3></div>
+                <div class="kpi-card" style="padding:.8rem"><p style="color:#aaa;font-size:.85rem">Total Keys</p><h3 id="redisKeys" style="font-size:1.1rem">-</h3></div>
+            </div>
+            <h4 style="margin-bottom:.8rem;color:#ddd">Cached Endpoints</h4>
+            <table class="admin-table" id="redisCacheTable">
+                <thead><tr><th>Key Pattern</th><th>TTL</th><th>What It Caches</th></tr></thead>
+                <tbody></tbody>
+            </table>
         </div>
 
         <!-- Charts Row -->
@@ -195,6 +221,9 @@
                 document.getElementById("kpiMessages").textContent = d.messages;
                 document.getElementById("kpiPosts").textContent = d.post_count;
 
+                // Redis info
+                renderRedisInfo(d.redis);
+
                 renderLineChart("visitorsChart", d.visitors_per_day, "Visitors");
                 renderLineChart("pageviewsChart", d.pageviews_per_day, "Page Views");
                 renderBarChart("clicksChart", d.top_clicks, "element", "clicks", "Clicks");
@@ -318,6 +347,35 @@
         }
 
         function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+        // ── Redis Info ──
+        function renderRedisInfo(r) {
+            if (!r) return;
+            const kpiEl = document.querySelector("#kpiRedis span");
+            const panel = document.getElementById("redisInfoPanel");
+            if (r.connected) {
+                kpiEl.textContent = "Connected";
+                kpiEl.style.color = "#00b894";
+                document.getElementById("redisKpiCard").style.borderColor = "#00b894";
+                panel.style.display = "block";
+                document.getElementById("redisStatus").innerHTML = '<span style="color:#00b894">✅ Connected</span>';
+                document.getElementById("redisMemory").textContent = r.used_memory_human || "-";
+                document.getElementById("redisPeak").textContent = r.peak_memory_human || "-";
+                document.getElementById("redisKeys").textContent = r.total_keys ?? "-";
+                const tb = document.querySelector("#redisCacheTable tbody");
+                tb.innerHTML = (r.cached_endpoints || []).map(e =>
+                    `<tr><td><code>${esc(e.key_pattern)}</code></td><td>${esc(e.ttl)}</td><td>${esc(e.purpose)}</td></tr>`
+                ).join("");
+            } else {
+                kpiEl.textContent = "Offline";
+                kpiEl.style.color = "#636e72";
+                panel.style.display = "block";
+                document.getElementById("redisStatus").innerHTML = '<span style="color:#636e72">❌ Not Connected</span>';
+                document.getElementById("redisMemory").textContent = "N/A";
+                document.getElementById("redisPeak").textContent = "N/A";
+                document.getElementById("redisKeys").textContent = "N/A";
+            }
+        }
     </script>
 </body>
 </html>

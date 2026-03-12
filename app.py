@@ -810,6 +810,30 @@ def admin_stats():
     cur.close()
     conn.close()
 
+    # Redis cache info
+    redis_info = {"connected": False}
+    if redis_client:
+        try:
+            info = redis_client.info(section="memory")
+            db_info = redis_client.info(section="keyspace")
+            key_count = sum(v.get("keys", 0) for v in db_info.values() if isinstance(v, dict))
+            redis_info = {
+                "connected": True,
+                "used_memory_human": info.get("used_memory_human", "?"),
+                "peak_memory_human": info.get("used_memory_peak_human", "?"),
+                "total_keys": key_count,
+                "cached_endpoints": [
+                    {"key_pattern": "stats:overview", "ttl": "60s", "purpose": "Admin dashboard KPIs & charts"},
+                    {"key_pattern": "stats:retention", "ttl": "300s", "purpose": "Retention cohort analysis"},
+                    {"key_pattern": "posts:list:*", "ttl": "120s", "purpose": "Blog listing with tag/page"},
+                    {"key_pattern": "post:<slug>", "ttl": "300s", "purpose": "Single blog post content"},
+                    {"key_pattern": "tags:all", "ttl": "300s", "purpose": "Tag list with counts"},
+                    {"key_pattern": "projects:all", "ttl": "300s", "purpose": "GitHub projects list"},
+                ],
+            }
+        except Exception:
+            redis_info = {"connected": True, "error": "Could not fetch Redis info"}
+
     result = {
         "visitors": visitors, "clicks": clicks, "messages": messages,
         "pageviews": pageviews, "post_count": post_count,
@@ -817,6 +841,7 @@ def admin_stats():
         "top_clicks": top_clicks, "top_pages": top_pages,
         "email_domains": email_domains, "devices": devices,
         "recent_messages": recent_messages, "top_posts": top_posts,
+        "redis": redis_info,
     }
     cache_set("stats:overview", result, ttl=60)
     return jsonify(result)
