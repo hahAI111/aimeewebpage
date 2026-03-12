@@ -1,27 +1,28 @@
 # Azure Cloud Setup Guide — Step by Step
 
-A complete, detailed guide to deploying this Flask portfolio website on Microsoft Azure from scratch. Covers every Azure resource you need: Resource Group, Virtual Network, App Service, PostgreSQL, Redis, CI/CD, and monitoring.
+A complete, detailed guide to deploying this Flask portfolio website on Microsoft Azure. This guide reflects **how this project was actually built**: Azure Portal auto-creates most infrastructure (VNet, subnets, private DNS, private endpoints) when you create PostgreSQL and Redis. The only manual work on App Service is configuring the startup command and environment variables.
 
 ---
 
 ## Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
-2. [Prerequisites](#2-prerequisites)
-3. [Step 1 — Create a Resource Group](#3-step-1--create-a-resource-group)
-4. [Step 2 — Create a Virtual Network (VNet)](#4-step-2--create-a-virtual-network-vnet)
-5. [Step 3 — Create Azure PostgreSQL Flexible Server](#5-step-3--create-azure-postgresql-flexible-server)
-6. [Step 4 — Create Azure Cache for Redis](#6-step-4--create-azure-cache-for-redis)
-7. [Step 5 — Create an App Service Plan](#7-step-5--create-an-app-service-plan)
-8. [Step 6 — Create the Web App (App Service)](#8-step-6--create-the-web-app-app-service)
-9. [Step 7 — Configure App Settings & Connection Strings](#9-step-7--configure-app-settings--connection-strings)
-10. [Step 8 — Set Up GitHub Actions CI/CD](#10-step-8--set-up-github-actions-cicd)
-11. [Step 9 — Configure Networking & Private Endpoints](#11-step-9--configure-networking--private-endpoints)
-12. [Step 10 — Verify Deployment](#12-step-10--verify-deployment)
-13. [Step 11 — Set Up Monitoring & Logs](#13-step-11--set-up-monitoring--logs)
-14. [Cost Estimation](#14-cost-estimation)
-15. [Our Live Configuration Reference](#15-our-live-configuration-reference)
-16. [Troubleshooting](#16-troubleshooting)
+2. [What Azure Creates Automatically vs. What You Configure Manually](#2-what-azure-creates-automatically-vs-what-you-configure-manually)
+3. [Prerequisites](#3-prerequisites)
+4. [Step 1 — Create a Resource Group](#4-step-1--create-a-resource-group)
+5. [Step 2 — Create Azure PostgreSQL Flexible Server](#5-step-2--create-azure-postgresql-flexible-server)
+6. [Step 3 — Create Azure Cache for Redis](#6-step-3--create-azure-cache-for-redis)
+7. [Step 4 — Create the Web App (App Service)](#7-step-4--create-the-web-app-app-service)
+8. [Step 5 — Configure the Startup Command (Manual)](#8-step-5--configure-the-startup-command-manual)
+9. [Step 6 — Configure Environment Variables (Manual)](#9-step-6--configure-environment-variables-manual)
+10. [Step 7 — Set Up GitHub Actions CI/CD](#10-step-7--set-up-github-actions-cicd)
+11. [Step 8 — Verify Deployment](#11-step-8--verify-deployment)
+12. [Step 9 — Set Up Monitoring & Logs](#12-step-9--set-up-monitoring--logs)
+13. [Understanding the Auto-Created Networking](#13-understanding-the-auto-created-networking)
+14. [Deep Dive — Why Each Configuration Exists](#14-deep-dive--why-each-configuration-exists)
+15. [Cost Estimation](#15-cost-estimation)
+16. [Our Live Configuration Reference](#16-our-live-configuration-reference)
+17. [Troubleshooting](#17-troubleshooting)
 
 ---
 
@@ -36,7 +37,7 @@ Here is the architecture of what you'll build:
 │                                                                 │
 │  ┌─────────────┐    VNet Integration    ┌──────────────────┐   │
 │  │  App Service │◄─────────────────────►│  Virtual Network  │   │
-│  │  (Linux,     │                       │  (vnet-zqopjmgp)  │   │
+│  │  (Linux,     │                       │  (auto-created)   │   │
 │  │   Python)    │                       │                    │   │
 │  └──────┬───────┘                       │  ┌──────────────┐ │   │
 │         │                               │  │ Subnet       │ │   │
@@ -62,155 +63,90 @@ Here is the architecture of what you'll build:
 │                                                                 │
 │  ┌──────────────────┐                                          │
 │  │  Private DNS      │  privatelink.postgres.database.azure.com│
-│  │  Zones            │  privatelink.redis.cache.windows.net    │
+│  │  Zones (auto)     │  privatelink.redis.cache.windows.net    │
 │  └──────────────────┘                                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Design Principles:**
-- All services are in the **same region** (Canada Central) for low latency
-- PostgreSQL and Redis are accessed via **private networking** (no public internet)
-- App Service connects to backend services through **VNet Integration**
-- CI/CD via **GitHub Actions** — push to `main` triggers automatic deployment
+**Key takeaway:** The diagram looks complex, but most of the networking (VNet, subnets, private DNS zones, private endpoints, NSGs) is **automatically created by Azure** when you create PostgreSQL and Redis through the Portal. You don't need to set any of that up manually.
 
 ---
 
-## 2. Prerequisites
+## 2. What Azure Creates Automatically vs. What You Configure Manually
+
+This is the most important section. Many tutorials make Azure look harder than it is by showing manual VNet/subnet/NSG setup. In reality, the Azure Portal wizard does it for you.
+
+### Auto-Created by Azure (you just click through the wizard)
+
+When you create **PostgreSQL Flexible Server** with "Private access", Azure automatically creates:
+- ✅ Virtual Network (VNet) with address space
+- ✅ PostgreSQL subnet with proper delegation
+- ✅ Private DNS zone (`privatelink.postgres.database.azure.com`)
+- ✅ DNS zone VNet link
+- ✅ Network Security Groups (NSGs)
+
+When you create **Azure Cache for Redis** with "Private Endpoint", Azure automatically creates:
+- ✅ Redis private endpoint
+- ✅ Cache subnet in the existing VNet
+- ✅ Private DNS zone (`privatelink.redis.cache.windows.net`)
+- ✅ Network interface for the private endpoint
+- ✅ NSG for the cache subnet
+
+When you create **App Service** and connect it to the VNet, Azure automatically creates:
+- ✅ App Service subnet in the existing VNet
+- ✅ VNet integration configuration
+- ✅ NSG for the app subnet
+
+### Manually Configured by You (the actual work)
+
+On the **App Service**, you only need to do two things:
+
+| Manual Step | What | Why |
+|-------------|------|-----|
+| **Startup Command** | `gunicorn --bind=0.0.0.0:8000 --timeout 600 app:app` | Tell Azure how to run your Flask app |
+| **Environment Variables** | App Settings + Connection Strings | Give your app the database passwords, email config, etc. |
+
+That's it. Everything else is handled by Azure's provisioning wizards.
+
+---
+
+## 3. Prerequisites
 
 Before you start, make sure you have:
 
 | Requirement | How to Get It |
 |-------------|---------------|
 | **Azure Account** | Sign up at [azure.microsoft.com](https://azure.microsoft.com/free/) — free tier available |
-| **Azure CLI** | Install: [docs.microsoft.com/cli/azure/install](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) |
 | **GitHub Account** | [github.com](https://github.com/) |
 | **Git** | [git-scm.com](https://git-scm.com/downloads) |
 | **Python 3.10+** | [python.org](https://www.python.org/downloads/) |
-
-**Login to Azure CLI:**
-
-```bash
-az login
-```
-
-This opens a browser window. Sign in with your Azure account. After login, verify:
-
-```bash
-az account show --query "{Name:name, SubscriptionId:id, State:state}" -o table
-```
-
-Expected output:
-
-```
-Name                  SubscriptionId                        State
---------------------  ------------------------------------  -------
-Your Subscription     xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  Enabled
-```
+| **Azure CLI** (optional) | [docs.microsoft.com/cli/azure/install](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) — only needed if you prefer command-line over Portal |
 
 ---
 
-## 3. Step 1 — Create a Resource Group
+## 4. Step 1 — Create a Resource Group
 
-A **Resource Group** is a logical container for all your Azure resources. Put everything in one group so you can manage and delete them together.
+A **Resource Group** is a logical container that holds all your Azure resources together. Think of it as a folder — when you delete the folder, everything inside gets deleted too. This makes cleanup easy.
 
 ### Azure Portal
 
 1. Go to [portal.azure.com](https://portal.azure.com)
-2. Click **"Create a resource"** (top left, or the `+` icon)
-3. Search for **"Resource group"** → Click **Create**
-4. Fill in:
+2. Click **"Create a resource"** → Search for **"Resource group"** → Click **Create**
+3. Fill in:
    - **Subscription:** Select your subscription
-   - **Resource group name:** `my-portfolio-rg` (or any name you like)
-   - **Region:** `Canada Central` (choose a region close to your users)
-5. Click **"Review + create"** → **"Create"**
-
-### Azure CLI (Alternative)
-
-```bash
-az group create \
-  --name my-portfolio-rg \
-  --location canadacentral
-```
-
-### What You Should See
-
-```json
-{
-  "id": "/subscriptions/.../resourceGroups/my-portfolio-rg",
-  "location": "canadacentral",
-  "name": "my-portfolio-rg",
-  "properties": {
-    "provisioningState": "Succeeded"
-  }
-}
-```
-
-> **Tip:** Choose a region that has all the services you need. `canadacentral`, `eastus`, and `westeurope` are popular choices with full service availability.
-
----
-
-## 4. Step 2 — Create a Virtual Network (VNet)
-
-A Virtual Network provides **private, secure communication** between your Azure services. Your App Service, PostgreSQL, and Redis will communicate through this VNet instead of the public internet.
-
-### Azure Portal
-
-1. Search for **"Virtual Network"** → Click **Create**
-2. **Basics** tab:
-   - **Resource group:** `my-portfolio-rg`
-   - **Name:** `my-portfolio-vnet`
-   - **Region:** `Canada Central` (must match your resource group)
-3. **IP Addresses** tab:
-   - **Address space:** `10.0.0.0/16` (default, gives you 65,536 IPs)
-   - Add three subnets:
-
-   | Subnet Name | Address Range | Purpose |
-   |-------------|---------------|---------|
-   | `webapp-subnet` | `10.0.1.0/24` | App Service VNet Integration |
-   | `postgres-subnet` | `10.0.2.0/24` | PostgreSQL Flexible Server |
-   | `cache-subnet` | `10.0.3.0/24` | Redis Private Endpoint |
-
+   - **Resource group name:** `my-portfolio-rg`
+   - **Region:** `Canada Central` (choose a region close to your target users)
 4. Click **"Review + create"** → **"Create"**
 
-### Azure CLI (Alternative)
-
-```bash
-# Create VNet
-az network vnet create \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-vnet \
-  --address-prefix 10.0.0.0/16 \
-  --location canadacentral
-
-# Create subnets
-az network vnet subnet create \
-  --resource-group my-portfolio-rg \
-  --vnet-name my-portfolio-vnet \
-  --name webapp-subnet \
-  --address-prefixes 10.0.1.0/24 \
-  --delegations Microsoft.Web/serverFarms
-
-az network vnet subnet create \
-  --resource-group my-portfolio-rg \
-  --vnet-name my-portfolio-vnet \
-  --name postgres-subnet \
-  --address-prefixes 10.0.2.0/24 \
-  --delegations Microsoft.DBforPostgreSQL/flexibleServers
-
-az network vnet subnet create \
-  --resource-group my-portfolio-rg \
-  --vnet-name my-portfolio-vnet \
-  --name cache-subnet \
-  --address-prefixes 10.0.3.0/24
-```
-
-> **Important:** The `webapp-subnet` must be delegated to `Microsoft.Web/serverFarms` and the `postgres-subnet` to `Microsoft.DBforPostgreSQL/flexibleServers`. Delegations ensure the subnet is reserved for that specific service.
+> **Why this region?** All services must be in the same region for low latency and VNet connectivity. `canadacentral`, `eastus`, and `westeurope` are popular choices with full service availability.
 
 ---
 
-## 5. Step 3 — Create Azure PostgreSQL Flexible Server
+## 5. Step 2 — Create Azure PostgreSQL Flexible Server
 
 PostgreSQL stores all persistent data: visitors, analytics, blog posts, projects.
+
+**When you create PostgreSQL with Private access, Azure will automatically create the VNet, subnet, and private DNS zone for you.** You do NOT need to create a VNet manually first.
 
 ### Azure Portal
 
@@ -219,45 +155,46 @@ PostgreSQL stores all persistent data: visitors, analytics, blog posts, projects
    - **Resource group:** `my-portfolio-rg`
    - **Server name:** `my-portfolio-db` (must be globally unique)
    - **Region:** `Canada Central`
-   - **PostgreSQL version:** `14` (stable and well-tested)
+   - **PostgreSQL version:** `14`
    - **Workload type:** `Development` (cheapest for personal projects)
    - **Compute + storage:**
-     - **Compute tier:** `Burstable`
-     - **Compute size:** `Standard_B1ms` (1 vCore, 2 GB RAM — cheapest option)
-     - **Storage:** `32 GB` (minimum, can scale up later)
-   - **Admin username:** `pgadmin` (or any username)
-   - **Password:** Choose a strong password, **save it!**
+     - Click **Configure server** → Select `Burstable` tier → `Standard_B1ms` (cheapest: 1 vCore, 2 GB RAM)
+     - **Storage:** `32 GB`
+   - **Admin username:** `pgadmin`
+   - **Password:** Choose a strong password — **save it somewhere safe!**
 3. **Networking** tab:
-   - **Connectivity method:** `Private access (VNet Integration)`
-   - **Virtual network:** `my-portfolio-vnet`
-   - **Subnet:** `postgres-subnet`
-   - **Private DNS zone:** Create new → `privatelink.postgres.database.azure.com`
+   - **Connectivity method:** Select **`Private access (VNet Integration)`**
+   - Azure will show: "A new virtual network and a new subnet delegated to PostgreSQL will be created"
+   - **Virtual network:** Click **Create new** → Give it any name (e.g., `my-portfolio-vnet`)
+   - **Subnet:** Azure auto-creates a delegated subnet
+   - **Private DNS zone:** Click **Create new** → Azure suggests `privatelink.postgres.database.azure.com`
+   - Just accept the defaults — Azure handles the networking setup
 4. Click **"Review + create"** → **"Create"**
 
-   ⏱ This takes **5-10 minutes** to provision.
+   ⏱ This takes **5-10 minutes**.
 
-### Azure CLI (Alternative)
+### What Azure Auto-Created For You
 
-```bash
-az postgres flexible-server create \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-db \
-  --location canadacentral \
-  --admin-user pgadmin \
-  --admin-password "YourStrongPassword123!" \
-  --sku-name Standard_B1ms \
-  --tier Burstable \
-  --version 14 \
-  --storage-size 32 \
-  --vnet my-portfolio-vnet \
-  --subnet postgres-subnet \
-  --private-dns-zone privatelink.postgres.database.azure.com
-```
+After PostgreSQL finishes provisioning, go to your resource group. You'll see Azure created **all of these automatically**:
+
+| Resource | Type | Why Azure Created It |
+|----------|------|---------------------|
+| `my-portfolio-db` | PostgreSQL Flexible Server | You requested this |
+| `my-portfolio-vnet` | Virtual Network | Needed for private access |
+| A subnet | Subnet (delegated to PostgreSQL) | Isolates the database traffic |
+| `privatelink.postgres.database.azure.com` | Private DNS Zone | Resolves DB hostname to private IP |
+| A VNet link | DNS Zone → VNet Link | Connects DNS zone to your VNet |
+| An NSG | Network Security Group | Firewall rules for the subnet |
+
+**You didn't have to configure any of this networking manually.** Azure's "Private access" wizard did it all.
 
 ### Create the Application Database
 
-After the server is created, create a database for the app:
+After the server is created, you need to create a database inside it:
 
+**Portal:** Go to your PostgreSQL server → **Databases** → Click **+ Add** → Name: `portfolio`
+
+**Or CLI:**
 ```bash
 az postgres flexible-server db create \
   --resource-group my-portfolio-rg \
@@ -265,24 +202,24 @@ az postgres flexible-server db create \
   --database-name portfolio
 ```
 
-### Verify Connection String Format
+### Note Your Connection String
 
-Your connection string will look like this:
+Your connection string will look like this (you'll need it in Step 6):
 
 ```
 host=my-portfolio-db.postgres.database.azure.com dbname=portfolio port=5432 
 user=pgadmin password=YourStrongPassword123! sslmode=require
 ```
 
-> **Security Note:** The server is only accessible from within the VNet. No public IP is exposed, which is more secure than allowing public access.
-
-> **Cost Tip:** `Standard_B1ms` (Burstable) costs ~$12-15/month. For production, `Standard_D2s_v3` (General Purpose) costs ~$125/month but is much more powerful.
+> **Cost Tip:** `Standard_B1ms` (Burstable) costs ~$12-15/month. Our production setup uses `Standard_D2s_v3` (General Purpose, ~$125/month) which is more powerful but not necessary for a personal site.
 
 ---
 
-## 6. Step 4 — Create Azure Cache for Redis
+## 6. Step 3 — Create Azure Cache for Redis
 
-Redis caches analytics stats and blog posts to reduce database queries and improve performance.
+Redis caches analytics stats and blog posts to reduce database load and improve response time.
+
+**Azure will automatically create a private endpoint, subnet, and DNS zone when you select Private Endpoint networking.** It reuses the VNet that was auto-created in Step 2.
 
 ### Azure Portal
 
@@ -292,56 +229,39 @@ Redis caches analytics stats and blog posts to reduce database queries and impro
    - **DNS name:** `my-portfolio-cache` (must be globally unique)
    - **Location:** `Canada Central`
    - **Cache SKU:** `Basic`
-   - **Cache size:** `C0 (250 MB)` — cheapest option, perfect for caching
+   - **Cache size:** `C0 (250 MB)` — cheapest, perfect for caching
 3. **Networking** tab:
-   - **Connectivity method:** `Private Endpoint`
-   - Click **"Add a private endpoint"**:
-     - **Name:** `my-portfolio-cache-pe`
-     - **Virtual network:** `my-portfolio-vnet`
-     - **Subnet:** `cache-subnet`
-     - **Private DNS zone:** `privatelink.redis.cache.windows.net`
+   - **Connectivity method:** Select **`Private Endpoint`**
+   - Click **"+ Add private endpoint"**:
+     - **Name:** `my-portfolio-cache-pe` (or accept the auto-generated name)
+     - **Virtual network:** Select the VNet that was auto-created with PostgreSQL (e.g., `my-portfolio-vnet`)
+     - **Subnet:** Azure will create a new subnet automatically, or select an existing one
+     - **Private DNS zone:** Azure suggests `privatelink.redis.cache.windows.net` — accept the default
 4. **Advanced** tab:
-   - **Non-SSL port:** `Disabled` (use SSL only for security)
+   - **Non-SSL port (6379):** `Disabled` (use SSL only for security)
    - **Minimum TLS version:** `1.2`
 5. Click **"Review + create"** → **"Create"**
 
-   ⏱ This takes **15-20 minutes** to provision.
+   ⏱ This takes **15-20 minutes**.
 
-### Azure CLI (Alternative)
+### What Azure Auto-Created For You
 
-```bash
-# Create Redis Cache
-az redis create \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-cache \
-  --location canadacentral \
-  --sku Basic \
-  --vm-size c0 \
-  --minimum-tls-version 1.2
+| Resource | Type | Why Azure Created It |
+|----------|------|---------------------|
+| `my-portfolio-cache` | Redis Cache | You requested this |
+| `my-portfolio-cache-pe` | Private Endpoint | Routes traffic through VNet instead of internet |
+| A NIC | Network Interface | The private endpoint's network interface |
+| A subnet | Subnet in existing VNet | Dedicated space for the private endpoint |
+| `privatelink.redis.cache.windows.net` | Private DNS Zone | Resolves Redis hostname to private IP |
+| An NSG | Network Security Group | Firewall rules for the cache subnet |
 
-# Create Private Endpoint for Redis
-az network private-endpoint create \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-cache-pe \
-  --vnet-name my-portfolio-vnet \
-  --subnet cache-subnet \
-  --private-connection-resource-id $(az redis show --resource-group my-portfolio-rg --name my-portfolio-cache --query id -o tsv) \
-  --group-id redisCache \
-  --connection-name my-portfolio-cache-connection
-```
+### Get Redis Access Key
 
-### Get Redis Connection String
+After Redis is created, get the connection string:
 
-After Redis is created, get the access key:
+**Portal:** Go to your Redis cache → **Settings** → **Access keys** → Copy **Primary connection string**
 
-```bash
-az redis list-keys \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-cache
-```
-
-Your connection string format:
-
+The format is:
 ```
 my-portfolio-cache.redis.cache.windows.net:6380,password=YourAccessKey,ssl=True,abortConnect=False
 ```
@@ -350,208 +270,168 @@ my-portfolio-cache.redis.cache.windows.net:6380,password=YourAccessKey,ssl=True,
 
 ---
 
-## 7. Step 5 — Create an App Service Plan
+## 7. Step 4 — Create the Web App (App Service)
 
-The App Service Plan defines the compute resources (CPU, RAM) for your web app.
-
-### Azure Portal
-
-1. Search for **"App Service Plan"** → Click **Create**
-2. Fill in:
-   - **Resource group:** `my-portfolio-rg`
-   - **Name:** `my-portfolio-plan`
-   - **Operating System:** `Linux`
-   - **Region:** `Canada Central`
-   - **Pricing tier:** `Basic B1` (1 vCore, 1.75 GB RAM, supports VNet integration)
-3. Click **"Review + create"** → **"Create"**
-
-### Azure CLI (Alternative)
-
-```bash
-az appservice plan create \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-plan \
-  --is-linux \
-  --sku B1 \
-  --location canadacentral
-```
-
-> **Pricing Tiers Comparison:**
->
-> | Tier | vCPU | RAM | VNet | Custom Domain | Price/Month |
-> |------|------|-----|------|---------------|-------------|
-> | Free F1 | Shared | 1 GB | ❌ | ❌ | $0 |
-> | Basic B1 | 1 | 1.75 GB | ✅ | ✅ | ~$13 |
-> | Standard S1 | 1 | 1.75 GB | ✅ | ✅ + Slots | ~$70 |
-> | Premium P1v3 | 2 | 8 GB | ✅ | ✅ + Slots + Scale | ~$130 |
->
-> **Recommendation:** Use **Basic B1** for personal projects. It supports VNet integration which is needed for private PostgreSQL and Redis access.
-
----
-
-## 8. Step 6 — Create the Web App (App Service)
-
-This is the web application that runs your Flask code.
+The App Service runs your Flask code. When you create it with VNet connectivity, Azure automatically integrates it with the existing VNet (auto-created in Step 2).
 
 ### Azure Portal
 
 1. Search for **"App Service"** → Click **Create** → **Web App**
 2. **Basics** tab:
    - **Resource group:** `my-portfolio-rg`
-   - **Name:** `my-portfolio-app` (this becomes `my-portfolio-app.azurewebsites.net`)
+   - **Name:** `my-portfolio-app` (this becomes your URL: `my-portfolio-app.azurewebsites.net`)
    - **Publish:** `Code`
    - **Runtime stack:** `Python 3.12` (or latest stable)
    - **Operating system:** `Linux`
    - **Region:** `Canada Central`
-   - **App Service Plan:** `my-portfolio-plan` (the one you created in Step 5)
+   - **Pricing plan:** Click **Create new** → Select `Basic B1` ($13/month — cheapest that supports VNet)
 3. **Deployment** tab:
-   - Enable **GitHub Actions** continuous deployment (we'll configure in Step 8)
+   - **GitHub Actions:** Enable continuous deployment → connect your GitHub repo
 4. **Networking** tab:
-   - **Enable public access:** `On` (users need to reach your website)
+   - **Enable public access:** `On` (users need to reach your website from the internet)
    - **Enable network injection:** `On`
-   - **Virtual network:** `my-portfolio-vnet`
-   - **Subnet:** `webapp-subnet`
+   - **Virtual network:** Select the VNet auto-created with PostgreSQL (e.g., `my-portfolio-vnet`)
+   - **Subnet:** Azure will create a new subnet automatically for the App Service
 5. Click **"Review + create"** → **"Create"**
 
-### Azure CLI (Alternative)
+### What Azure Auto-Created For You
 
-```bash
-# Create the Web App
-az webapp create \
-  --resource-group my-portfolio-rg \
-  --plan my-portfolio-plan \
-  --name my-portfolio-app \
-  --runtime "PYTHON:3.12"
+| Resource | Type | Why Azure Created It |
+|----------|------|---------------------|
+| `my-portfolio-app` | App Service (Web App) | You requested this |
+| An App Service Plan | Service Plan (Linux, B1) | Compute resources for your app |
+| A subnet | Subnet in existing VNet | For App Service VNet integration |
+| An NSG | Network Security Group | Firewall rules for the app subnet |
+| A managed identity | User Assigned Identity | For secure Azure resource access |
 
-# Enable VNet Integration
-az webapp vnet-integration add \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-app \
-  --vnet my-portfolio-vnet \
-  --subnet webapp-subnet
-```
-
-### Configure the Startup Command
-
-Flask needs a production WSGI server. We use **Gunicorn**:
-
-```bash
-az webapp config set \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-app \
-  --startup-file "gunicorn --bind=0.0.0.0:8000 --timeout 600 app:app"
-```
-
-This tells Azure to:
-- Use `gunicorn` (a production-ready Python HTTP server)
-- Bind to port `8000` (Azure's default for Python apps)
-- Set timeout to `600` seconds (needed for long DB operations on first start)
-- Run the Flask `app` object from `app.py`
-
-### Enable HTTPS Only
-
-```bash
-az webapp update \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-app \
-  --https-only true
-```
-
-### Enable Build During Deployment
-
-```bash
-az webapp config appsettings set \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-app \
-  --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true
-```
-
-This tells Azure to run `pip install -r requirements.txt` automatically during deployment.
+> **Pricing Tiers Comparison:**
+>
+> | Tier | vCPU | RAM | VNet Support | Price/Month |
+> |------|------|-----|------|-------------|
+> | Free F1 | Shared | 1 GB | ❌ | $0 |
+> | Basic B1 | 1 | 1.75 GB | ✅ | ~$13 |
+> | Standard S1 | 1 | 1.75 GB | ✅ + Slots | ~$70 |
+> | Premium P1v3 | 2 | 8 GB | ✅ + Scale | ~$130 |
+>
+> You need **at least Basic B1** because PostgreSQL and Redis are on a private VNet. Free/Shared tiers cannot connect to VNets.
 
 ---
 
-## 9. Step 7 — Configure App Settings & Connection Strings
+## 8. Step 5 — Configure the Startup Command (Manual)
 
-Your Flask app needs environment variables for database connections, email, and more.
+**This is one of the two things you must do manually.** Azure doesn't know how to run your Flask app — you need to tell it.
 
-### Required App Settings
+### What to Set
 
-| Setting | Value | Purpose |
-|---------|-------|---------|
-| `OWNER_EMAIL` | `your@email.com` | Receives contact form notifications |
-| `SMTP_SERVER` | `smtp.gmail.com` | Gmail SMTP server |
-| `SMTP_PORT` | `587` | Gmail SMTP port (TLS) |
-| `SMTP_USER` | `your@gmail.com` | Gmail account for sending |
-| `SMTP_PASS` | `xxxx xxxx xxxx xxxx` | Gmail App Password (NOT your Gmail password) |
-| `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true` | Auto-install Python packages |
+Go to your **App Service** → **Settings** → **Configuration** → **General settings** tab:
 
-### Azure Portal
+- **Startup Command:** `gunicorn --bind=0.0.0.0:8000 --timeout 600 app:app`
 
-1. Go to your **App Service** → **Settings** → **Environment variables**
-2. Under **App settings**, click **"+ Add"** for each setting:
+Click **Save**.
 
-   ```
-   Name: OWNER_EMAIL         Value: your@email.com
-   Name: SMTP_SERVER          Value: smtp.gmail.com
-   Name: SMTP_PORT            Value: 587
-   Name: SMTP_USER            Value: your@gmail.com
-   Name: SMTP_PASS            Value: your-app-password
-   ```
+### Why Each Part of This Command Exists
 
-3. Under **Connection strings**, click **"+ Add"**:
-
-   | Name | Value | Type |
-   |------|-------|------|
-   | `AZURE_POSTGRESQL_CONNECTIONSTRING` | `host=my-portfolio-db.postgres.database.azure.com dbname=portfolio port=5432 user=pgadmin password=YourPassword sslmode=require` | `PostgreSQL` |
-   | `azure_redis_cache` | `my-portfolio-cache.redis.cache.windows.net:6380,password=YourRedisKey,ssl=True,abortConnect=False` | `Custom` |
-
-4. Click **"Apply"** → **"Confirm"**
-
-### Azure CLI (Alternative)
-
-```bash
-# Set App Settings
-az webapp config appsettings set \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-app \
-  --settings \
-    OWNER_EMAIL="your@email.com" \
-    SMTP_SERVER="smtp.gmail.com" \
-    SMTP_PORT="587" \
-    SMTP_USER="your@gmail.com" \
-    SMTP_PASS="your-app-password" \
-    SCM_DO_BUILD_DURING_DEPLOYMENT="true"
-
-# Set Connection Strings
-az webapp config connection-string set \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-app \
-  --connection-string-type PostgreSQL \
-  --settings AZURE_POSTGRESQL_CONNECTIONSTRING="host=my-portfolio-db.postgres.database.azure.com dbname=portfolio port=5432 user=pgadmin password=YourPassword sslmode=require"
-
-az webapp config connection-string set \
-  --resource-group my-portfolio-rg \
-  --name my-portfolio-app \
-  --connection-string-type Custom \
-  --settings azure_redis_cache="my-portfolio-cache.redis.cache.windows.net:6380,password=YourRedisKey,ssl=True,abortConnect=False"
 ```
+gunicorn --bind=0.0.0.0:8000 --timeout 600 app:app
+│         │                    │              │
+│         │                    │              └── What to run
+│         │                    └── How long to wait
+│         └── Where to listen
+└── Which server to use
+```
+
+| Part | Value | Why It's Needed |
+|------|-------|----------------|
+| `gunicorn` | Gunicorn WSGI server | **Flask's built-in server is for development only.** It can only handle one request at a time and is not secure. Gunicorn is a production-grade Python HTTP server that handles concurrent requests, worker process management, and graceful restarts. It's the industry standard for deploying Flask/Django apps. |
+| `--bind=0.0.0.0:8000` | Listen on all interfaces, port 8000 | **`0.0.0.0`** means "accept connections from any IP address" (not just localhost). **Port `8000`** is Azure App Service's default expected port for Python apps — Azure's reverse proxy forwards incoming HTTPS (443) traffic to your app on port 8000. If you bind to a different port, Azure can't reach your app. |
+| `--timeout 600` | 600 seconds (10 minutes) | **Prevents worker timeout on first startup.** When the app starts for the first time, it creates 9 database tables, seeds 5 blog posts, and establishes connections to PostgreSQL and Redis. This can take 30-60 seconds on a cold start. The default Gunicorn timeout is only 30 seconds — if any of these operations takes longer, Gunicorn kills the worker and the app crashes with a 503 error. 600 seconds gives plenty of headroom. |
+| `app:app` | module:variable | **Tells Gunicorn where to find the Flask application object.** The first `app` = the Python file (`app.py`), the second `app` = the Flask variable name inside that file (`app = Flask(__name__)`). Gunicorn imports `app.py` and looks for the variable `app` to start serving. |
+
+### What Happens Without This Command
+
+Without a startup command, Azure tries to auto-detect your app by looking for common patterns like `application.py` or `wsgi.py`. Since our file is `app.py` with variable `app`, Azure would:
+1. Try its default startup → may or may not find `app.py`
+2. Use the Flask development server instead of Gunicorn → single-threaded, slow, insecure
+3. Use default Gunicorn timeout (30s) → first-time DB setup times out → 503 error
+
+---
+
+## 9. Step 6 — Configure Environment Variables (Manual)
+
+**This is the second thing you must do manually.** Your Flask app needs database connections, email credentials, and other secrets that should never be in code.
+
+### Why Environment Variables Instead of Hardcoding?
+
+```python
+# ❌ NEVER do this — secrets in code get pushed to GitHub
+conn = psycopg2.connect("host=server.azure.com password=MySecret123")
+
+# ✅ The correct way — read from environment variables
+conn_str = os.environ.get("AZURE_POSTGRESQL_CONNECTIONSTRING")
+conn = psycopg2.connect(conn_str)
+```
+
+Azure App Settings are injected as **environment variables** at runtime. They are:
+- **Encrypted at rest** — stored securely in Azure's infrastructure
+- **Not in your code** — never accidentally committed to Git
+- **Easy to change** — update without redeploying code
+- **Slot-specific** — can have different values for staging vs. production
+
+### How to Configure
+
+Go to your **App Service** → **Settings** → **Environment variables**
+
+#### App Settings (click "+ Add" for each)
+
+| Name | Example Value | Why It's Needed |
+|------|---------------|----------------|
+| `OWNER_EMAIL` | `you@example.com` | **Contact form recipient.** When visitors submit the contact form, the app sends an email notification to this address. Without it, contact form submissions are saved to the database but no email is sent. |
+| `SMTP_SERVER` | `smtp.gmail.com` | **Email server hostname.** The app uses SMTP (Simple Mail Transfer Protocol) to send emails. Gmail's SMTP server is `smtp.gmail.com`. If you use Outlook, it would be `smtp.office365.com`. |
+| `SMTP_PORT` | `587` | **Email server port.** Port 587 is the standard SMTP port for TLS-encrypted email submission. Port 465 is for SSL. Port 25 is unencrypted (blocked by most providers). Always use 587 with STARTTLS. |
+| `SMTP_USER` | `you@gmail.com` | **Email sender account.** The "from" address for outgoing emails. Must be a real Gmail account that you control. |
+| `SMTP_PASS` | `xxxx xxxx xxxx xxxx` | **Gmail App Password (NOT your Gmail login password).** Google requires a 16-character "App Password" for third-party apps. This is a separate credential that only works for SMTP. See instructions below for how to generate one. |
+| `SCM_DO_BUILD_DURING_DEPLOYMENT` | `true` | **Auto-install Python dependencies.** Tells Kudu (Azure's deployment engine) to run `pip install -r requirements.txt` during deployment. Without this, your app has no packages (no Flask, no psycopg2, etc.) and crashes immediately. |
+
+#### Connection Strings (click "+ Add" for each)
+
+| Name | Example Value | Type | Why It's Needed |
+|------|---------------|------|----------------|
+| `AZURE_POSTGRESQL_CONNECTIONSTRING` | `host=my-db.postgres.database.azure.com dbname=portfolio port=5432 user=pgadmin password=YourPwd sslmode=require` | `PostgreSQL` | **Database connection.** Contains the server address, database name, credentials, and SSL mode. `sslmode=require` ensures the connection is encrypted. The app reads this to connect to PostgreSQL on startup. |
+| `azure_redis_cache` | `my-cache.redis.cache.windows.net:6380,password=Key,ssl=True,abortConnect=False` | `Custom` | **Redis connection.** Port `6380` = SSL port (not 6379 which is unencrypted). `ssl=True` enforces encryption. `abortConnect=False` means the app won't crash if Redis is temporarily unavailable — it retries in the background. |
+
+Click **"Apply"** → **"Confirm"** to save all settings. The app will restart automatically.
+
+### Why Connection Strings Are Separate from App Settings
+
+Azure has two categories of environment variables:
+
+| Category | Stored As | Prefix Added | Purpose |
+|----------|-----------|--------------|---------|
+| **App Settings** | `os.environ["NAME"]` | None | General config (email, flags) |
+| **Connection Strings** | `os.environ["CUSTOMCONNSTR_NAME"]` or `os.environ["POSTGRESQLCONNSTR_NAME"]` | Type prefix | Database/service connections — marked as "sensitive" in Azure Portal, hidden by default |
+
+Connection strings get a prefix based on their type: `POSTGRESQLCONNSTR_`, `CUSTOMCONNSTR_`, `SQLCONNSTR_`, etc. The app code accounts for this when reading environment variables.
 
 ### How to Get a Gmail App Password
 
 1. Go to [myaccount.google.com/security](https://myaccount.google.com/security)
 2. Enable **2-Step Verification** if not already on
-3. Search for **"App passwords"** in the security page
-4. Create a new app password:
-   - App: `Mail`
-   - Device: `Other` → Name it `Azure Portfolio`
+3. Search for **"App passwords"**
+4. Create a new app password → Name it `Azure Portfolio`
 5. Copy the 16-character password (format: `xxxx xxxx xxxx xxxx`)
-6. Use this as the `SMTP_PASS` value
+6. Use this as `SMTP_PASS`
 
-> **Security Warning:** Never commit passwords or connection strings to Git. Always use App Settings/Environment Variables.
+> **Security Warning:** Never commit passwords or connection strings to Git. Always use App Settings.
 
 ---
 
-## 10. Step 8 — Set Up GitHub Actions CI/CD
+## 10. Step 7 — Set Up GitHub Actions CI/CD
+
+Continuous deployment means every `git push` to `main` automatically deploys to Azure.
+
+---
+
+## 10. Step 7 — Set Up GitHub Actions CI/CD
 
 Continuous deployment means every `git push` to `main` automatically deploys to Azure.
 
@@ -656,72 +536,7 @@ After both jobs complete, your site is live at `https://my-portfolio-app.azurewe
 
 ---
 
-## 11. Step 9 — Configure Networking & Private Endpoints
-
-Your App Service needs to reach PostgreSQL and Redis through the VNet. Here's how the network connectivity works:
-
-```
-  Internet Users
-       │
-       │ HTTPS (port 443)
-       ▼
-┌──────────────────┐
-│   App Service    │  ← Public endpoint (users connect here)
-│  (webapp-subnet) │
-└──────┬───────────┘
-       │
-       │ VNet Integration (private traffic)
-       ▼
-┌──────────────────┐
-│  Virtual Network │
-│  10.0.0.0/16     │
-│                  │
-│  ┌────────────┐  │
-│  │ postgres-  │  │    Private DNS:
-│  │ subnet     │──┼──► my-portfolio-db.postgres.database.azure.com
-│  │ 10.0.2.0/24│  │    → resolves to private IP (e.g., 10.0.2.4)
-│  └────────────┘  │
-│                  │
-│  ┌────────────┐  │    Private Endpoint:
-│  │ cache-     │  │    my-portfolio-cache.redis.cache.windows.net
-│  │ subnet     │──┼──► → resolves to private IP (e.g., 10.0.3.4)
-│  │ 10.0.3.0/24│  │
-│  └────────────┘  │
-└──────────────────┘
-```
-
-### Verify VNet Integration
-
-If you set up VNet integration during App Service creation, it's already done. To verify:
-
-```bash
-az webapp vnet-integration list \
-  --name my-portfolio-app \
-  --resource-group my-portfolio-rg \
-  -o table
-```
-
-Expected output:
-
-```
-Location        Name            ResourceGroup
---------------  --------------  ---------------
-Canada Central  webapp-subnet   my-portfolio-rg
-```
-
-### Verify Private DNS Resolution
-
-From the App Service console (Portal → App Service → Development Tools → Console), test DNS:
-
-```bash
-nslookup my-portfolio-db.postgres.database.azure.com
-```
-
-It should resolve to a **private IP** (10.x.x.x), not a public IP.
-
----
-
-## 12. Step 10 — Verify Deployment
+## 11. Step 8 — Verify Deployment
 
 ### Check the Website
 
@@ -768,7 +583,7 @@ Seeded 5 blog posts
 
 ---
 
-## 13. Step 11 — Set Up Monitoring & Logs
+## 12. Step 9 — Set Up Monitoring & Logs
 
 ### Enable HTTP Logging
 
@@ -813,7 +628,158 @@ az redis show \
 
 ---
 
-## 14. Cost Estimation
+## 13. Understanding the Auto-Created Networking
+
+This section explains the networking infrastructure that Azure created automatically in Steps 2-4. You don't need to do anything here — it's just for understanding.
+
+### How Traffic Flows
+
+```
+  Internet Users
+       │
+       │ HTTPS (port 443)
+       ▼
+┌──────────────────┐
+│   App Service    │  ← Public endpoint (users connect here)
+│  (webapp-subnet) │
+└──────┬───────────┘
+       │
+       │ VNet Integration (private traffic, NOT over internet)
+       ▼
+┌──────────────────────────────────────┐
+│         Virtual Network              │
+│         (auto-created)               │
+│                                      │
+│  ┌─────────────────┐                 │
+│  │ PostgreSQL       │  Private DNS:  │
+│  │ subnet           │  hostname →    │
+│  │ (auto-created)   │  private IP    │
+│  └─────────────────┘  (10.x.x.x)    │
+│                                      │
+│  ┌─────────────────┐                 │
+│  │ Redis private    │  Private DNS:  │
+│  │ endpoint subnet  │  hostname →    │
+│  │ (auto-created)   │  private IP    │
+│  └─────────────────┘  (10.x.x.x)    │
+└──────────────────────────────────────┘
+```
+
+### Why Private Networking Matters
+
+**Without VNet (public access):**
+```
+App Service ──── internet ────► PostgreSQL (public IP)
+                                 └── anyone with the IP could try to connect
+                                 └── traffic exposed to network sniffing
+```
+
+**With VNet (private access, our setup):**
+```
+App Service ──── VNet (private) ────► PostgreSQL (private IP only)
+                                       └── NO public IP exists
+                                       └── only resources in the VNet can connect
+                                       └── traffic never leaves Azure's backbone
+```
+
+The database has **no public IP at all**. Even if someone knows the hostname, they can't connect because DNS resolves to a private IP that's only routable within the VNet.
+
+### Private DNS Zones — How Hostname Resolution Works
+
+Azure auto-created two Private DNS Zones:
+
+| DNS Zone | Resolves | To |
+|----------|----------|----|
+| `privatelink.postgres.database.azure.com` | `my-db.postgres.database.azure.com` | `10.0.2.4` (private IP) |
+| `privatelink.redis.cache.windows.net` | `my-cache.redis.cache.windows.net` | `10.0.3.4` (private IP) |
+
+**How it works:** When the App Service code calls `psycopg2.connect("host=my-db.postgres.database.azure.com ...")`, the DNS lookup goes through the Private DNS Zone (because the App Service is in the VNet). The zone returns a private IP like `10.0.2.4` instead of a public IP. The connection then flows entirely within the VNet.
+
+### Network Security Groups (NSGs)
+
+Azure auto-created NSGs for each subnet. These are like firewalls that control:
+- **Inbound rules:** What traffic can enter the subnet
+- **Outbound rules:** What traffic can leave the subnet
+
+The default rules allow traffic within the VNet and block traffic from the internet to the database/cache subnets. You don't need to modify these for a standard setup.
+
+### Verify Networking (Optional)
+
+```bash
+# Check VNet integration is active
+az webapp vnet-integration list \
+  --name my-portfolio-app \
+  --resource-group my-portfolio-rg \
+  -o table
+
+# From App Service console (Portal → Development Tools → Console):
+nslookup my-portfolio-db.postgres.database.azure.com
+# Should return a private IP (10.x.x.x), not a public IP
+```
+
+---
+
+## 14. Deep Dive — Why Each Configuration Exists
+
+Here's a comprehensive reference explaining the principle behind every setting in this project.
+
+### App Service Settings
+
+| Setting | Value | Principle |
+|---------|-------|-----------|
+| **Runtime: Python 3.12+** | `PYTHON\|3.14` | Azure needs to know which language runtime to install. Python apps need the Python interpreter, pip, and standard library pre-installed in the container. |
+| **OS: Linux** | `app,linux` | Python web apps run on Linux containers in Azure. Linux is lighter weight (~100MB) vs Windows (~1GB), starts faster, and is the standard for Python deployments. |
+| **HTTPS Only** | `true` | Forces all HTTP requests to redirect to HTTPS. Without this, user data (login credentials, emails) would be sent in plain text over the network. |
+| **Min TLS: 1.2** | `1.2` | TLS (Transport Layer Security) encrypts HTTPS traffic. Version 1.0 and 1.1 have known vulnerabilities. 1.2 is the minimum secure version as of 2024. |
+| **FTPS Only** | `FtpsOnly` | FTP transfers files unencrypted. FTPS adds SSL encryption. "FtpsOnly" prevents accidental unencrypted file uploads to the server. |
+| **Always On: No** | `false` | "Always On" keeps the app warm (no cold starts). It costs more because the app never idles. For a personal portfolio with low traffic, cold starts are acceptable to save cost. |
+
+### Startup Command — Every Parameter Explained
+
+```
+gunicorn --bind=0.0.0.0:8000 --timeout 600 app:app
+```
+
+| Parameter | Principle |
+|-----------|----------|
+| `gunicorn` | **WSGI server.** WSGI (Web Server Gateway Interface) is the standard protocol between Python web apps and HTTP servers. Flask implements WSGI. Gunicorn is a multi-process WSGI server that can handle many concurrent requests. Flask's built-in server (`flask run`) is single-threaded and insecure — it even prints "WARNING: Do not use the development server in a production deployment." |
+| `--bind=0.0.0.0` | **Network interface binding.** `0.0.0.0` means "listen on all network interfaces" — this allows Azure's reverse proxy to connect to the app. If you used `127.0.0.1` (localhost), only processes inside the same container could connect, and Azure's proxy would get "connection refused". |
+| `:8000` | **Port number.** Azure App Service for Linux expects Python apps to listen on port 8000. Azure's front-end load balancer receives HTTPS traffic on port 443 and forwards it internally to port 8000. This port mapping is hardcoded in Azure's platform. |
+| `--timeout 600` | **Worker timeout in seconds.** If a request takes longer than this to respond, Gunicorn kills the worker process and starts a new one. Default is 30 seconds. Our app needs more because: (1) first startup creates 9 DB tables + seeds 5 blog posts (~30-60s), (2) cold starts on Burstable VMs are slow, (3) large CSV exports may take time. 600s = 10 minutes of headroom. |
+| `app:app` | **module:variable format.** First `app` = Python module name (file `app.py` → module `app`). Second `app` = the Flask application variable inside that module (`app = Flask(__name__)`). Gunicorn imports the module and calls the variable as a WSGI application. |
+
+### Environment Variables — Every Setting Explained
+
+| Variable | Principle |
+|----------|-----------|
+| `AZURE_POSTGRESQL_CONNECTIONSTRING` | **Connection string.** Contains host, database, port, username, password, and SSL mode in one string. The `sslmode=require` part forces encrypted connections — even within the VNet, defense in depth means encrypting data in transit. |
+| `azure_redis_cache` | **Redis connection.** Uses port 6380 (SSL) not 6379 (plain). `abortConnect=False` is critical — if Redis is temporarily down during app startup, the app still starts and retries Redis later instead of crashing. |
+| `OWNER_EMAIL` | **Separation of config from code.** The email recipient could change without code changes. Hardcoding it would require a full redeployment just to change an email address. |
+| `SMTP_*` settings | **Email delivery.** SMTP (Simple Mail Transfer Protocol) is how email is sent between servers. Port 587 uses STARTTLS (starts unencrypted, upgrades to TLS). The App Password is used because Gmail blocks less-secure "password only" login for third-party apps — App Passwords are scoped credentials that can be revoked independently. |
+| `SCM_DO_BUILD_DURING_DEPLOYMENT` | **Build automation.** SCM = Source Code Management (Azure's deployment engine, called Kudu). This flag tells Kudu to detect `requirements.txt` and run `pip install` during deployment. Without it, your app has zero Python packages installed and crashes with `ModuleNotFoundError: No module named 'flask'`. |
+| `WEBSITE_HTTPLOGGING_RETENTION_DAYS` | **Log retention policy.** HTTP logs (request URL, status code, response time) are stored for this many days. 7 days is enough to debug recent issues without accumulating large storage costs. |
+
+### PostgreSQL Settings
+
+| Setting | Principle |
+|---------|-----------|
+| **Version 14** | PostgreSQL 14 is a stable, well-tested release with good JSON support, improved performance, and long-term security patches. Not bleeding edge (less bugs), not too old (has modern features). |
+| **Burstable tier** | "Burstable" means the VM normally runs at a baseline CPU level but can burst to full speed for short periods. Perfect for web apps: most requests are simple (low CPU), but occasionally a complex query or export needs more power. Costs much less than "General Purpose" which reserves full CPU all the time. |
+| **Backup: 7 days** | Azure automatically takes daily backups and keeps them for 7 days. If your database gets corrupted or you accidentally delete data, you can restore to any point within the last 7 days. This is built-in and free with any PostgreSQL Flexible Server. |
+| **HA: Disabled** | High Availability creates a standby replica in another availability zone for automatic failover. For a personal portfolio, downtime of a few minutes is acceptable. HA doubles the cost. |
+| **sslmode=require** | Even though traffic stays within the VNet (never touches the internet), we still encrypt the PostgreSQL connection. This is "defense in depth" — if somehow network isolation fails, the data is still encrypted. It also protects against internal threats. |
+
+### Redis Settings
+
+| Setting | Principle |
+|---------|-----------|
+| **Basic C0** | The smallest Redis instance (250 MB, shared infrastructure). Sufficient for caching stats and blog posts. "Basic" means no replication or SLA — acceptable for a cache (if Redis dies, the app falls back to direct DB queries). |
+| **SSL Port 6380** | Port 6379 is Redis's unencrypted port. Port 6380 is the SSL-encrypted port. We disable 6379 entirely so that all Redis traffic is encrypted, even within the private VNet. |
+| **Min TLS 1.2** | Same as App Service — prevents connections using outdated, vulnerable TLS versions. |
+| **Private Endpoint** | Unlike PostgreSQL (which uses VNet Integration directly), Redis uses a "Private Endpoint" — a virtual NIC inside the VNet that gets a private IP. The effect is the same: Redis is only accessible from within the VNet, with no public IP. |
+
+---
+
+## 15. Cost Estimation
 
 Here is the monthly cost breakdown for the recommended setup:
 
@@ -850,7 +816,7 @@ az group delete --name my-portfolio-rg --yes --no-wait
 
 ---
 
-## 15. Our Live Configuration Reference
+## 16. Our Live Configuration Reference
 
 Here is the actual Azure configuration used by this project for reference:
 
@@ -933,7 +899,7 @@ Here is the actual Azure configuration used by this project for reference:
 
 ---
 
-## 16. Troubleshooting
+## 17. Troubleshooting
 
 ### "Application Error" after deployment
 
@@ -1003,20 +969,19 @@ Subsequent requests are fast (~50-200ms).
 Use this checklist to track your progress:
 
 - [ ] Created Resource Group
-- [ ] Created Virtual Network with 3 subnets
-- [ ] Created PostgreSQL Flexible Server (VNet integrated)
-- [ ] Created application database
-- [ ] Created Azure Cache for Redis with Private Endpoint
-- [ ] Created App Service Plan (Linux, Basic B1)
-- [ ] Created Web App (Python runtime)
-- [ ] Configured startup command (gunicorn)
-- [ ] Enabled HTTPS only
-- [ ] Added App Settings (email, SMTP)
-- [ ] Added Connection Strings (PostgreSQL, Redis)
+- [ ] Created PostgreSQL Flexible Server (Azure auto-creates VNet, subnet, private DNS)
+- [ ] Created application database inside PostgreSQL
+- [ ] Created Azure Cache for Redis with Private Endpoint (Azure auto-creates subnet, private DNS)
+- [ ] Created App Service with VNet integration (Azure auto-creates subnet)
+- [ ] **[Manual]** Configured startup command: `gunicorn --bind=0.0.0.0:8000 --timeout 600 app:app`
+- [ ] **[Manual]** Added App Settings (OWNER_EMAIL, SMTP_*, SCM_DO_BUILD_DURING_DEPLOYMENT)
+- [ ] **[Manual]** Added Connection Strings (PostgreSQL, Redis)
 - [ ] Set up GitHub Actions workflow
 - [ ] Added publish profile as GitHub secret
 - [ ] Pushed code and verified deployment
 - [ ] Tested full user flow (verify → blog → admin)
 - [ ] Enabled logging and monitoring
+
+> Only 3 items are marked **[Manual]** — everything else is done through Azure's creation wizards with default settings.
 
 **Congratulations!** Your Flask portfolio website is now running on Azure with enterprise-grade infrastructure. 🎉
