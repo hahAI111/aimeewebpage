@@ -68,7 +68,8 @@ my-website/
 
 ### Admin Dashboard (`/admin`)
 - **Secure Login** — bcrypt password hashing, session-based auth
-- **KPI Cards** — Visitors, page views, clicks, messages, blog post counts
+- **KPI Cards** — Visitors, page views, clicks, messages, blog post counts, Redis cache status
+- **Redis Cache Panel** — Live connection status, memory usage, peak memory, total cached keys, and a table of all 6 cached endpoints with key patterns, TTLs, and descriptions
 - **Charts** — Visitors/day, pageviews/day, top clicks, device breakdown, email domains, top pages (Chart.js)
 - **Visitor List** — Pagination, domain filtering
 - **Retention Cohorts** — Day 0/1/7/30 retention analysis with SQL CTEs
@@ -113,7 +114,7 @@ my-website/
 | POST | `/api/projects/sync` | Admin | Sync repos from GitHub API |
 | POST | `/api/admin/login` | — | Admin login (bcrypt) |
 | POST | `/api/admin/logout` | — | Admin logout |
-| GET | `/api/admin/stats` | Admin | Full analytics dashboard data |
+| GET | `/api/admin/stats` | Admin | Full analytics dashboard data + Redis server info |
 | GET | `/api/admin/visitors` | Admin | Paginated visitor list with domain filter |
 | GET | `/api/admin/export/<table>` | Admin | CSV export (visitors, click_logs, messages, page_views) |
 | GET | `/api/admin/retention` | Admin | Retention cohort analysis |

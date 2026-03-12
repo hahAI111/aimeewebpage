@@ -20,6 +20,7 @@
 │  │   GET  /blog/<slug>  → individual post                 │  │
 │  │   GET  /projects     → GitHub project showcase         │  │
 │  │   GET  /admin        → admin dashboard (login req.)    │  │
+│  │                        (incl. Redis cache monitoring)   │  │
 │  │   POST /api/verify   → validate email → insert visitor │  │
 │  │   POST /api/pageview → record page view analytics      │  │
 │  │   POST /api/track    → log click event                 │  │

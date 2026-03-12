@@ -18,6 +18,7 @@ to reduce PostgreSQL query load and accelerate API responses.
   - [GitHub Project List](#4-github-project-list)
   - [Admin Stats Dashboard](#5-admin-stats-dashboard)
   - [Retention Analysis](#6-retention-analysis)
+- [Admin Dashboard Redis Panel](#admin-dashboard-redis-panel)
 - [Cache Invalidation Strategy](#cache-invalidation-strategy)
 - [Fault Tolerance Design](#fault-tolerance-design)
 - [Azure Portal Monitoring](#azure-portal-monitoring)
@@ -269,6 +270,42 @@ Request → cache_get("stats:retention")
 ```
 
 **Note**: Retention analysis is the most expensive query (multi-table CTE + heavy DISTINCT calculations); 300-second caching is essential here.
+
+---
+
+## Admin Dashboard Redis Panel
+
+The admin dashboard at `/admin` includes a **dedicated Redis monitoring section** that provides real-time cache visibility without needing to open Azure Portal.
+
+### What It Shows
+
+The `/api/admin/stats` endpoint calls `redis_client.info(section="memory")` and `redis_client.info(section="keyspace")` to gather server-level metrics:
+
+| Metric | Source | Description |
+|--------|--------|-------------|
+| Connection Status | `redis_client.ping()` | Connected (green) / Offline (gray) |
+| Memory Used | `info["used_memory_human"]` | Current memory consumption |
+| Peak Memory | `info["used_memory_peak_human"]` | Highest memory usage since last restart |
+| Total Keys | `keyspace.db0.keys` | Number of cached keys across all databases |
+
+### Cached Endpoints Table
+
+The panel also displays a table listing all 6 cached API patterns:
+
+| Key Pattern | TTL | What It Caches |
+|---|---|---|
+| `stats:overview` | 60s | Admin dashboard KPIs & charts |
+| `stats:retention` | 300s | Retention cohort analysis |
+| `posts:list:*` | 120s | Blog listing with tag/page |
+| `post:<slug>` | 300s | Single blog post content |
+| `tags:all` | 300s | Tag list with counts |
+| `projects:all` | 300s | GitHub projects list |
+
+### UI Components
+
+1. **KPI Card** — 6th card in the KPI grid with a database SVG icon, shows "Connected" (green) or "Offline" (gray)
+2. **Redis Cache Status Panel** — 4 mini-KPI cards (Status, Memory, Peak Memory, Keys) + cached endpoints table
+3. **Fault Tolerance** — If Redis is unavailable, the panel renders gracefully with "Offline" / "N/A" values instead of crashing
 
 ---
 

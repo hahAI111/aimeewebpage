@@ -107,7 +107,7 @@ Dashboard and data management:
 |-------|--------|------|-------------|
 | `/api/admin/login` | POST | — | Admin login (bcrypt password verification) |
 | `/api/admin/logout` | POST | — | Admin logout (clear session) |
-| `/api/admin/stats` | GET | Admin | Full analytics dashboard data (8 SQL queries) |
+| `/api/admin/stats` | GET | Admin | Full analytics dashboard data (8 SQL queries + Redis server info) |
 | `/api/admin/visitors` | GET | Admin | Paginated visitor list with domain filter |
 | `/api/admin/export/<table>` | GET | Admin | CSV export (visitors, click_logs, messages, page_views) |
 | `/api/admin/retention` | GET | Admin | Retention cohort analysis (CTE query) |
