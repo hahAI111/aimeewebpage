@@ -166,4 +166,5 @@ All documentation is in the [`docs/`](docs/) folder:
 - [POSTGRESQL.md](docs/POSTGRESQL.md) — Database schema, SQL operations, monitoring & maintenance
 - [REDIS.md](docs/REDIS.md) — Cache strategy, core functions, Azure Redis monitoring
 - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — Issues encountered during development and solutions
+- [MIGRATION.md](docs/MIGRATION.md) — Migration guide: backup, self-deployment, platform comparison
 - [STORY.md](docs/STORY.md) — The full project journey from scratch to production
