@@ -856,8 +856,11 @@ def contact():
 @app.route("/api/posts")
 def api_list_posts():
     tag = request.args.get("tag", "").strip()
-    page_num = max(1, int(request.args.get("page", "1")))
-    per_page = min(20, int(request.args.get("per_page", "10")))
+    try:
+        page_num = max(1, int(request.args.get("page", "1")))
+        per_page = min(20, int(request.args.get("per_page", "10")))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid page or per_page"}), 400
     offset = (page_num - 1) * per_page
 
     cache_key = f"posts:list:{tag}:{page_num}:{per_page}"
@@ -1140,8 +1143,11 @@ def admin_stats():
 @app.route("/api/admin/visitors")
 @require_admin
 def admin_visitors():
-    page_num = max(1, int(request.args.get("page", "1")))
-    per_page = min(50, int(request.args.get("per_page", "20")))
+    try:
+        page_num = max(1, int(request.args.get("page", "1")))
+        per_page = min(50, int(request.args.get("per_page", "20")))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid page or per_page"}), 400
     domain_filter = request.args.get("domain", "").strip()
     offset = (page_num - 1) * per_page
 
