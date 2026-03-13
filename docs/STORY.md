@@ -474,17 +474,20 @@ Why write documentation?
 2. **For others** — Anyone can quickly understand the project
 3. **To showcase ability** — Proves you can think systematically, not just write code
 
-The final project includes 7 documents:
+The final project includes 10 documents (all in `docs/`):
 
 | Document | Content | Target Audience |
 |---|---|---|
 | README.md | Project overview, quick start | Everyone |
-| ARCHITECTURE.md | System architecture, component relationships | Engineers |
+| ARCHITECTURE.md | System architecture, security design | Engineers |
 | POSTGRESQL.md | Database schema, SQL deep dive, monitoring | Backend developers |
 | REDIS.md | Cache strategy, monitoring, testing methods | Backend developers |
 | DEPLOYMENT.md | CI/CD pipeline end-to-end | DevOps |
 | TROUBLESHOOTING.md | Issue resolution guide | Operations |
 | STORY.md | The document you're reading now | Everyone |
+| AZURE_SETUP_GUIDE.md | Azure resource provisioning walkthrough | DevOps |
+| BACKUP_AND_MIGRATION.md | Database backup & migration procedures | Operations |
+| HOW_TO_DEPLOY.md | Step-by-step deployment guide | DevOps |
 
 **Skills**: Technical writing, systematic thinking, documentation structure design
 
@@ -522,15 +525,24 @@ my-website/
 │   ├── admin.html                ← Admin analytics dashboard
 │   ├── style.css                 ← Global styles
 │   └── script.js                 ← Page tracking + interactions
+├── docs/
+│   ├── ARCHITECTURE.md           ← System architecture & security design
+│   ├── AZURE_SETUP_GUIDE.md     ← Azure resource provisioning walkthrough
+│   ├── BACKUP_AND_MIGRATION.md  ← Database backup & migration procedures
+│   ├── DEPLOYMENT.md             ← CI/CD pipeline documentation
+│   ├── HOW_TO_DEPLOY.md         ← Step-by-step deployment guide
+│   ├── POSTGRESQL.md             ← Database documentation
+│   ├── REDIS.md                  ← Cache documentation
+│   ├── STORY.md                  ← Project story (this document)
+│   ├── TROUBLESHOOTING.md       ← Troubleshooting guide
+│   └── REDIS_ADMIN_SCREENSHOT.png
+├── tests/
+│   └── test_app.py               ← 50 unit tests
+├── screenshots/                   ← Feature screenshots
 ├── app.py                        ← Flask backend (all APIs + DB)
+├── seed_data.py                  ← Database seed data
 ├── requirements.txt              ← Python dependencies
-├── README.md                     ← Project overview
-├── ARCHITECTURE.md               ← System architecture
-├── POSTGRESQL.md                 ← Database documentation
-├── REDIS.md                      ← Cache documentation
-├── DEPLOYMENT.md                 ← Deployment documentation
-├── TROUBLESHOOTING.md            ← Troubleshooting guide
-└── STORY.md                      ← Project story (this document)
+└── README.md                     ← Project overview
 ```
 
 ---

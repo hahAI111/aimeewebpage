@@ -11,7 +11,6 @@ import time
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 from functools import wraps
-from urllib.parse import quote
 from flask import Flask, request, jsonify, send_from_directory, session, redirect, Response, make_response
 import psycopg2
 import psycopg2.extras
@@ -56,21 +55,29 @@ _raw_pg = (
 DATABASE_URL = _parse_pg_conn(_raw_pg)
 
 def _parse_redis_conn(raw):
-    if not raw or raw.startswith("redis"):
-        return raw
+    """Parse Azure Redis connection string into dict of {host, port, password, ssl}."""
+    if not raw:
+        return None
+    if raw.startswith("redis"):
+        # Already a URL — use from_url
+        return {"url": raw}
     parts = dict(p.split("=", 1) for p in raw.split(",") if "=" in p)
     host_port = raw.split(",")[0]
-    password = quote(parts.get("password", ""), safe="")
+    host, _, port = host_port.partition(":")
     use_ssl = parts.get("ssl", "False").lower() == "true"
-    scheme = "rediss" if use_ssl else "redis"
-    return f"{scheme}://:{password}@{host_port}/0"
+    return {
+        "host": host,
+        "port": int(port) if port else (6380 if use_ssl else 6379),
+        "password": parts.get("password", ""),
+        "ssl": use_ssl,
+    }
 
 _raw_redis = (
     os.environ.get("AZURE_REDIS_CONNECTIONSTRING")
     or os.environ.get("REDISCACHECONNSTR_azure_redis_cache")
     or ""
 )
-REDIS_URL = _parse_redis_conn(_raw_redis)
+_redis_cfg = _parse_redis_conn(_raw_redis)
 
 BLOCKED_DOMAINS = {
     "tempmail.com", "throwaway.email", "guerrillamail.com",
@@ -82,19 +89,30 @@ BLOCKED_DOMAINS = {
 
 # ── Redis Cache ────────────────────────────────────────────
 redis_client = None
-if REDIS_URL:
+if _redis_cfg:
     try:
-        redis_client = redis.Redis.from_url(
-            REDIS_URL, decode_responses=True,
-            socket_timeout=5, socket_connect_timeout=5,
-        )
+        if "url" in _redis_cfg:
+            redis_client = redis.Redis.from_url(
+                _redis_cfg["url"], decode_responses=True,
+                socket_timeout=5, socket_connect_timeout=5,
+            )
+        else:
+            redis_client = redis.Redis(
+                host=_redis_cfg["host"],
+                port=_redis_cfg["port"],
+                password=_redis_cfg["password"],
+                ssl=_redis_cfg["ssl"],
+                decode_responses=True,
+                socket_timeout=5,
+                socket_connect_timeout=5,
+            )
         redis_client.ping()
         print("Redis connected successfully", flush=True)
     except Exception as e:
         print(f"Redis connection failed: {e}", flush=True)
         redis_client = None
 else:
-    print("Redis URL not set, skipping", flush=True)
+    print("Redis connection string not set, skipping", flush=True)
 
 def cache_get(key):
     if redis_client:
