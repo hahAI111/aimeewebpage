@@ -374,3 +374,52 @@ GitHub Actions (.github/workflows/main_aimeelan.yml)
                 ▼
             Site live at https://aimeelan.azurewebsites.net
 ```
+
+---
+
+## Security Design
+
+### Password Hashing — Why bcrypt?
+
+Admin passwords are stored as **bcrypt hashes**, not plain text or simple SHA-256.
+
+| Approach | Problem |
+|----------|---------|
+| Plain text | Any database breach = all passwords exposed |
+| SHA-256 | Fast to compute → vulnerable to brute-force (billions of guesses/sec) |
+| bcrypt | Intentionally slow (cost factor) → brute-force becomes impractical |
+
+How bcrypt works:
+1. **Salt**: Generates a unique random salt per password (stored in the hash itself)
+2. **Cost factor**: `bcrypt.gensalt(rounds=12)` = $2^{12}$ = 4,096 iterations of the Blowfish cipher
+3. **Output**: `$2b$12$salt...hash` — includes algorithm version, cost, salt, and hash in one string
+4. **Verification**: `bcrypt.checkpw(password, hash)` is timing-safe (prevents timing attacks)
+
+```python
+# Storing (at setup):
+hash = bcrypt.hashpw(b"password", bcrypt.gensalt())
+# Verifying (at login):
+bcrypt.checkpw(b"password", stored_hash)  # → True/False
+```
+
+### Database Connections — Why No Connection Pool?
+
+The current design creates a **new `psycopg2.connect()` per request** rather than using a connection pool:
+
+```python
+conn = psycopg2.connect(DATABASE_URL)
+# ... execute queries ...
+conn.close()
+```
+
+**Why this works for our scale:**
+- Azure PostgreSQL Flexible Server handles connection management efficiently
+- Our traffic volume (personal portfolio) doesn't warrant pooling overhead
+- Each request opens → queries → closes cleanly, avoiding connection leaks
+
+**When to add pooling (psycopg2.pool or PgBouncer):**
+- If concurrent users exceed ~50 simultaneous requests
+- If connection setup time becomes a measurable bottleneck (>50ms)
+- If Azure reports "too many connections" errors
+
+This is a deliberate trade-off: **simplicity over premature optimization.**

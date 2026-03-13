@@ -122,7 +122,7 @@ This is the **only irreplaceable thing**. Your database contains real user data,
 **Method 1: pg_dump (RECOMMENDED — full backup)**
 
 ```powershell
-pg_dump "host=aimeelan-server.postgres.database.azure.com dbname=aimeelan-database user=prjxaadsjr password=YOUR_PASSWORD sslmode=require" > C:\Users\jingwang1\backup.sql
+pg_dump "host=aimeelan-server.postgres.database.azure.com dbname=aimeelan-database user=YOUR_USERNAME password=YOUR_PASSWORD sslmode=require" > backup.sql
 ```
 
 This single file contains:
@@ -184,7 +184,7 @@ GITHUB_USERNAME=hahAI111
 GITHUB_TOKEN=your-github-personal-access-token
 
 # === Database (will change on new platform) ===
-AZURE_POSTGRESQL_CONNECTIONSTRING=host=aimeelan-server.postgres.database.azure.com dbname=aimeelan-database user=prjxaadsjr password=xxx
+AZURE_POSTGRESQL_CONNECTIONSTRING=host=YOUR_SERVER.postgres.database.azure.com dbname=YOUR_DB user=YOUR_USERNAME password=YOUR_PASSWORD
 AZURE_REDIS_CONNECTIONSTRING=aimee-cache.redis.cache.windows.net:6380,password=xxx,ssl=True,abortConnect=False
 ```
 

@@ -49,9 +49,17 @@ my-website/
 │   └── script.js           # Click tracking, pageview tracking, animations
 ├── tests/
 │   └── test_app.py         # 50 unit tests (email, auth, routes, cache, parsers)
-├── docs/                   # Architecture & component documentation
-├── guides/                 # Deployment & migration guides
-├── tutorials/              # Step-by-step Azure setup tutorial
+├── docs/                   # All project documentation (10 files)
+│   ├── ARCHITECTURE.md     # System design, DB schema, security, data flow
+│   ├── FLASK.md            # All 22 routes, decorators, request flow
+│   ├── DEPLOYMENT.md       # CI/CD pipeline, GitHub Actions, Azure deploy
+│   ├── POSTGRESQL.md       # Database schema, SQL operations, monitoring
+│   ├── REDIS.md            # Cache strategy, admin panel, Azure Redis
+│   ├── TROUBLESHOOTING.md  # Issues & solutions encountered in development
+│   ├── STORY.md            # Full project journey narrative
+│   ├── HOW_TO_DEPLOY.md    # 5 deployment methods (local, Railway, Azure...)
+│   ├── BACKUP_AND_MIGRATION.md  # Backup guide & platform migration
+│   └── AZURE_SETUP_GUIDE.md    # Step-by-step Azure Portal setup tutorial
 ├── screenshots/            # Website screenshots for README
 └── .github/
     └── workflows/
@@ -166,7 +174,7 @@ python -m pytest tests/ -v
 | Variable | Description |
 |----------|-------------|
 | `AZURE_POSTGRESQL_CONNECTIONSTRING` | PostgreSQL connection string |
-| `REDISCACHECONNSTR_azure_redis_cache` | Redis connection string |
+| `AZURE_REDIS_CONNECTIONSTRING` | Redis connection string (optional — app works without it) |
 | `OWNER_EMAIL` | Email to receive contact notifications |
 | `SMTP_SERVER` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Gmail SMTP config |
 | `SECRET_KEY` | Flask session encryption key |
@@ -174,6 +182,7 @@ python -m pytest tests/ -v
 | `ADMIN_PASS` or `ADMIN_PASS_HASH` | Admin password (plain or bcrypt hash) |
 | `GITHUB_USERNAME` | GitHub user for project sync (default: `hahAI111`) |
 | `GITHUB_TOKEN` | GitHub personal access token (optional, raises API rate limit) |
+| `GITHUB_SYNC_INTERVAL` | Auto-sync interval in seconds (default: `21600` = 6 hours) |
 
 ## Deployment
 
