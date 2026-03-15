@@ -211,7 +211,7 @@ GitHub Actions will build and deploy to Azure App Service automatically.
 2. Login with admin credentials (set via `ADMIN_USER` / `ADMIN_PASS` env vars)
 3. The dashboard shows:
    - **KPI Cards** — Total visitors, page views, clicks, messages, blog posts
-   - **Redis Status** — Connected/Disconnected, memory usage, cached keys count, all 6 cached endpoints with TTLs
+   - **Redis Cache KPI** — Shows ✅ Connected (green) or ❌ Not Connected (gray) at a glance
    - **Charts** — Visitors per day, pageviews per day, top clicked elements, device types, email domains
    - **Top Pages & Posts** — Most viewed pages and blog posts
    - **Recent Messages** — Latest messages from the contact form
@@ -219,6 +219,30 @@ GitHub Actions will build and deploy to Azure App Service automatically.
    - **Retention Cohorts** — Day 0/1/7/30 visitor retention analysis
 4. **CSV Export** — Click "Export" buttons to download visitors, clicks, messages, or pageviews as CSV
 5. **GitHub Sync** — Click "Sync Projects" to pull latest repos from GitHub API
+
+### Admin — Redis Cache Panel
+
+When Redis is connected, a **Redis Cache Status** panel appears below the KPI cards showing:
+
+| Metric | Description |
+|--------|-------------|
+| **Status** | ✅ Connected (green) or ❌ Not Connected (gray) |
+| **Memory Used** | Current Redis memory consumption (e.g. `357.72K`) |
+| **Peak Memory** | Highest memory usage since Redis started (e.g. `559.67K`) |
+| **Total Keys** | Number of active cached keys in Redis |
+
+Below the metrics is a **Cached Endpoints** table listing all 6 cache keys:
+
+| Key Pattern | TTL | What It Caches |
+|-------------|-----|----------------|
+| `stats:overview` | 60s | Admin dashboard KPIs & charts |
+| `stats:retention` | 300s | Retention cohort analysis |
+| `posts:list:*` | 120s | Blog listing with tag/page |
+| `post:<slug>` | 300s | Single blog post content |
+| `tags:all` | 300s | Tag list with counts |
+| `projects:all` | 300s | GitHub projects list |
+
+**How it works:** The app caches expensive database queries in Redis with TTLs. When a cached key exists, the response is served from Redis (fast) instead of hitting PostgreSQL. Keys auto-expire after their TTL, so data stays fresh. If Redis is down, the app falls back to direct DB queries — everything still works, just slower.
 
 ### Blog
 
