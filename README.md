@@ -49,17 +49,18 @@ my-website/
 │   └── script.js           # Click tracking, pageview tracking, animations
 ├── tests/                  # Unit tests (pytest)
 │   └── test_app.py         # 50 unit tests (341 lines) — see detailed breakdown below
-├── documentation/          # All project documentation (10 files)
+├── guides/                 # How-to guides — step-by-step instructions
+│   ├── HOW_TO_DEPLOY.md    # 5 deployment methods (local, Railway, Azure, VPS)
+│   ├── AZURE_SETUP_GUIDE.md    # Step-by-step Azure Portal resource setup
+│   ├── DEPLOYMENT.md       # CI/CD pipeline — GitHub Actions workflow config
+│   ├── BACKUP_AND_MIGRATION.md  # What to back up, how to migrate platforms
+│   └── TROUBLESHOOTING.md  # Common issues & solutions with fix commands
+├── reference/              # Technical deep-dives — how the system works
 │   ├── ARCHITECTURE.md     # System design, DB schema, security, data flow
-│   ├── FLASK.md            # All 22 routes, decorators, request flow
-│   ├── DEPLOYMENT.md       # CI/CD pipeline, GitHub Actions, Azure deploy
-│   ├── POSTGRESQL.md       # Database schema, SQL operations, monitoring
-│   ├── REDIS.md            # Cache strategy, admin panel, Azure Redis
-│   ├── TROUBLESHOOTING.md  # Issues & solutions encountered in development
-│   ├── STORY.md            # Full project journey narrative
-│   ├── HOW_TO_DEPLOY.md    # 5 deployment methods (local, Railway, Azure...)
-│   ├── BACKUP_AND_MIGRATION.md  # Backup guide & platform migration
-│   └── AZURE_SETUP_GUIDE.md    # Step-by-step Azure Portal setup tutorial
+│   ├── FLASK.md            # All 22 routes, decorators, request lifecycle
+│   ├── POSTGRESQL.md       # Database schema, SQL queries, monitoring
+│   ├── REDIS.md            # Cache strategy, key patterns, Azure Redis
+│   └── STORY.md            # Full project build narrative from zero to prod
 ├── images/                 # Website screenshots for README
 └── .github/
     └── workflows/
@@ -339,22 +340,27 @@ Below the metrics is a **Cached Endpoints** table listing all 6 cache keys:
 | `WEBSITE_VNET_ROUTE_ALL` | `1` — routes all traffic through VNet |
 | `WEBSITE_DNS_SERVER` | `168.63.129.16` — Azure internal DNS for private endpoints |
 
-## Related Docs
+## Documentation
 
-All documentation is in the [`documentation/`](documentation/) folder:
+### [`guides/`](guides/) — How-To Guides (step-by-step instructions)
 
-| Document | Description |
-|----------|-------------|
-| [ARCHITECTURE.md](documentation/ARCHITECTURE.md) | System architecture, database design, data flow diagrams |
-| [FLASK.md](documentation/FLASK.md) | All 22 routes, auth decorators, request flow |
-| [DEPLOYMENT.md](documentation/DEPLOYMENT.md) | CI/CD pipeline, GitHub Actions workflow |
-| [POSTGRESQL.md](documentation/POSTGRESQL.md) | Database schema, SQL operations, monitoring |
-| [REDIS.md](documentation/REDIS.md) | Cache strategy, core functions, Azure Redis |
-| [TROUBLESHOOTING.md](documentation/TROUBLESHOOTING.md) | Issues & solutions from development |
-| [STORY.md](documentation/STORY.md) | Full project journey narrative |
-| [HOW_TO_DEPLOY.md](documentation/HOW_TO_DEPLOY.md) | 5 deployment methods (local, Railway, Azure, VPS) |
-| [BACKUP_AND_MIGRATION.md](documentation/BACKUP_AND_MIGRATION.md) | Backup guide & platform migration |
-| [AZURE_SETUP_GUIDE.md](documentation/AZURE_SETUP_GUIDE.md) | Step-by-step Azure Portal setup tutorial |
+| Document | What It Teaches You |
+|----------|--------------------|
+| [HOW_TO_DEPLOY.md](guides/HOW_TO_DEPLOY.md) | 5 ways to run & deploy: local dev, Railway, Render, Azure App Service, any VPS |
+| [AZURE_SETUP_GUIDE.md](guides/AZURE_SETUP_GUIDE.md) | Create every Azure resource from scratch: Resource Group → VNet → PostgreSQL → Redis → App Service → CI/CD |
+| [DEPLOYMENT.md](guides/DEPLOYMENT.md) | How the GitHub Actions CI/CD pipeline works: YAML config, build steps, deploy triggers |
+| [BACKUP_AND_MIGRATION.md](guides/BACKUP_AND_MIGRATION.md) | What to back up before you lose access, how to migrate to a new platform |
+| [TROUBLESHOOTING.md](guides/TROUBLESHOOTING.md) | Every issue hit during development + exact fix commands |
+
+### [`reference/`](reference/) — Technical Reference (how the system works)
+
+| Document | What It Explains |
+|----------|------------------|
+| [ARCHITECTURE.md](reference/ARCHITECTURE.md) | System design, DB schema (9 tables), security model, data flow diagrams |
+| [FLASK.md](reference/FLASK.md) | All 22 API routes, auth decorators, request lifecycle, middleware |
+| [POSTGRESQL.md](reference/POSTGRESQL.md) | Database schema, SQL operations, indexing, monitoring queries |
+| [REDIS.md](reference/REDIS.md) | Cache strategy, 6 cached endpoints, TTL design, Azure Redis config |
+| [STORY.md](reference/STORY.md) | Full project narrative: from zero knowledge to production deployment |
 
 ## Production Incident Log (March 2026)
 
